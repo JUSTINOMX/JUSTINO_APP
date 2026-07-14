@@ -1,0 +1,6 @@
+{
+  "name": "Justino - AI Legal Assistant",
+  "description": "A visionary AI legal assistant providing affordable, private, and instant legal guidance for the Mexican market.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

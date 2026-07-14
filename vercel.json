@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/v1/chat", "destination": "/api/v1/chat" },
+    { "source": "/api/health", "destination": "/api/health" },
+    { "source": "/api/(.*)", "destination": "/api/v1/chat" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}
