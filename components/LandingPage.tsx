@@ -70,7 +70,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
             <span className="text-emerald-400">Justino es tu guía legal digital.</span>
           </h1>
           <p className="text-slate-400 text-xl md:text-2xl max-w-4xl mx-auto mb-10 leading-relaxed font-medium">
-            Te ayuda a entender tu situación, preparar un plan, generar los documentos que necesites y saber exactamente qué hacer, paso a paso.
+            Te ayuda a entender tu situación, te prepara un plan de acción, te genera los documentos que necesites y te dice exactamente qué hacer, paso a paso.
           </p>
 
           <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-8 py-5 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl mb-12 max-w-2xl mx-auto text-center sm:text-left shadow-[0_0_30px_rgba(16,185,129,0.05)]">
@@ -97,9 +97,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
           </p>
         </section>
 
-        {/* Un problema legal no debería dejarte solo */}
+        {/* Un problema legal no debe enfrentarse solo */}
         <section className="w-full max-w-5xl mx-auto mb-40 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Un problema legal no debería dejarte solo</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">Un problema legal no debe enfrentarse solo</h2>
           <p className="text-slate-500 text-lg mb-12">Muchas personas no avanzan en su problema legal porque:</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-16 text-left">
