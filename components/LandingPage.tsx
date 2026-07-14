@@ -66,22 +66,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
 
         <section className="text-center max-w-5xl mx-auto mb-20">
           <h1 className="text-5xl md:text-7xl font-bold leading-[1.1] mb-8 tracking-tight">
-            Justino te ayuda con tu problema legal, <span className="text-emerald-400">paso a paso</span> y sin gastar de más
+            ¿No sabes qué hacer con tu problema legal?<br />
+            <span className="text-emerald-400">Justino es tu guía legal digital.</span>
           </h1>
-          <p className="text-slate-400 text-xl md:text-2xl max-w-3xl mx-auto mb-12 leading-relaxed font-medium">
-            Cuando tienes un problema legal, no necesitas palabras difíciles ni juicios caros. Necesitas entender qué hacer, qué sigue y cómo avanzar con calma.
+          <p className="text-slate-400 text-xl md:text-2xl max-w-4xl mx-auto mb-10 leading-relaxed font-medium">
+            Te ayuda a entender tu situación, preparar un plan, generar los documentos que necesites y saber exactamente qué hacer, paso a paso.
           </p>
+
+          <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-8 py-5 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl mb-12 max-w-2xl mx-auto text-center sm:text-left shadow-[0_0_30px_rgba(16,185,129,0.05)]">
+            <div className="flex items-baseline gap-1 shrink-0">
+              <span className="text-4xl font-black text-emerald-400">$400</span>
+              <span className="text-sm font-bold text-emerald-500/80">MXN</span>
+            </div>
+            <div className="w-px h-8 bg-white/10 hidden sm:block"></div>
+            <div className="text-slate-300 text-base font-medium leading-relaxed">
+              Desde el inicio de tu caso hasta que tú decidas cerrarlo.
+            </div>
+          </div>
 
           <button 
             onClick={onStart}
-            className="group px-12 py-6 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-xl transition-all shadow-xl hover:-translate-y-1 flex items-center gap-3 mx-auto"
+            className="group px-12 py-6 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-xl transition-all shadow-xl hover:-translate-y-1 flex items-center gap-3 mx-auto uppercase tracking-wider"
           >
-            Iniciar mi caso ahora
+            Quiero empezar mi caso
             <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
           </button>
           
-          <p className="mt-8 text-xs font-bold text-slate-500 uppercase tracking-[0.3em]">
-            DISEÑADO PARA MÉXICO · CLARO · ACCESIBLE · SIN LETRAS CHIQUITAS
+          <p className="mt-8 text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">
+            Basado en la legislación vigente de México.
           </p>
         </section>
 
@@ -99,198 +111,147 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
 
           <div className="bg-emerald-500/5 border border-emerald-500/10 p-10 rounded-[32px] max-w-4xl mx-auto">
              <p className="text-emerald-400 text-xl font-bold mb-3">Y mientras tanto, el problema crece.</p>
-             <p className="text-slate-400 text-base">Justino existe para que no te quedes detenido, para que tengas claridad y apoyo desde el primer momento.</p>
+             <p className="text-slate-400 text-base">Justino existe para que no te detengas, para que tengas claridad y acompañamiento desde el primer momento.</p>
+          </div>
+        </section>
+              {/* ¿QUÉ HARÁ JUSTINO POR TI? */}
+        <section className="w-full max-w-4xl mx-auto mb-32">
+          <h2 className="text-3xl md:text-5xl font-bold text-center mb-12 tracking-tight uppercase">
+            ¿Qué hará Justino por ti?
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[
+              "Entenderá tu caso.",
+              "Preparará un plan para ayudarte.",
+              "Generará los documentos que necesites.",
+              "Te dirá exactamente dónde y cómo continuar.",
+              "Mantendrá todo tu expediente organizado.",
+              "Recordará tu caso para que nunca vuelvas a empezar desde cero.",
+              "Permanecerá contigo hasta que tú decidas cerrar tu caso."
+            ].map((text, i) => (
+              <div 
+                key={i} 
+                className="flex items-start gap-4 p-6 bg-white/5 border border-white/10 rounded-2xl hover:border-emerald-500/20 transition-all duration-300 shadow-md"
+              >
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
+                  ✓
+                </div>
+                <p className="text-slate-200 text-lg font-medium leading-relaxed">{text}</p>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* ¿Qué es Justino? */}
-        <section className="w-full max-w-5xl mx-auto mb-40">
-           <div className="bg-white/5 border border-white/10 p-12 md:p-20 rounded-[48px] backdrop-blur-sm relative overflow-hidden">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                 <div className="space-y-8">
-                    <h2 className="text-4xl font-bold">¿Qué es Justino?</h2>
-                    <p className="text-slate-400 text-base md:text-lg leading-relaxed">
-                      Justino es una web app que te acompaña en los problemas legales más comunes, ayudándote a:
-                    </p>
-                    <ul className="space-y-5">
-                       {[
-                         { icon: Search, text: "Entender tu situación" },
-                         { icon: Info, text: "Saber qué opciones tienes" },
-                         { icon: FileText, text: "Preparar escritos y documentos" },
-                         { icon: Clock, text: "Avanzar paso a paso sin presión" }
-                       ].map((item, i) => (
-                         <li key={i} className="flex items-center gap-4 text-slate-300 font-medium text-base md:text-lg">
-                            <item.icon className="w-6 h-6 text-emerald-500/70" /> {item.text}
-                         </li>
-                       ))}
-                    </ul>
-                 </div>
-                 <div className="bg-white/5 p-10 rounded-3xl border border-white/10 flex flex-col justify-center">
-                    <div className="flex items-start gap-4 mb-6">
-                       <AlertCircle className="w-6 h-6 text-emerald-400 shrink-0" />
-                       <div>
-                          <p className="text-xs font-black uppercase tracking-widest text-emerald-400 mb-2">Poder Legal en tus manos</p>
-                          <p className="text-sm text-slate-400 leading-relaxed">Te da las herramientas para que tú mismo resuelvas tu caso con éxito.</p>
-                       </div>
-                    </div>
-                    <p className="text-xl font-bold italic leading-relaxed text-slate-200">
-                      "Justino es el primer apoyo para que no enfrentes tu problema a ciegas."
-                    </p>
-                 </div>
+        {/* ASÍ DE FÁCIL */}
+        <section className="w-full max-w-5xl mx-auto mb-32">
+          <h2 className="text-3xl md:text-5xl font-bold text-center mb-16 tracking-tight uppercase">
+            Así de fácil
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {[
+              {
+                step: "1",
+                title: "Cuéntale qué pasó.",
+                desc: "Solo responde una entrevista sencilla."
+              },
+              {
+                step: "2",
+                title: "Justino prepara tu caso.",
+                desc: "Entiende tu situación y crea un plan para ayudarte."
+              },
+              {
+                step: "3",
+                title: "Sigue la guía.",
+                desc: "Haz cada paso con la seguridad de saber qué sigue."
+              },
+              {
+                step: "4",
+                title: "Regresa cuando lo necesites.",
+                desc: "Si tu caso cambia, Justino continuará exactamente donde se quedó."
+              }
+            ].map((item, i) => (
+              <div key={i} className="relative p-8 bg-white/5 border border-white/10 rounded-3xl flex flex-col justify-between">
+                <div>
+                  <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-400 font-black text-xl mb-6">
+                    {item.step}
+                  </div>
+                  <h3 className="font-bold text-xl text-white mb-4 leading-snug">{item.title}</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">{item.desc}</p>
+                </div>
               </div>
-           </div>
+            ))}
+          </div>
         </section>
 
-        {/* Los 5 problemas... */}
-        <section className="w-full max-w-6xl mx-auto mb-40 text-center">
-           <h2 className="text-4xl md:text-5xl font-bold mb-8 max-w-4xl mx-auto">
-             Los 5 problemas legales más comunes con los que Justino te puede ayudar
-           </h2>
-           <p className="text-slate-500 text-lg md:text-xl mb-6 max-w-3xl mx-auto leading-relaxed">
-             Estos casos representan las situaciones legales más cotidianas y urgentes en México. Son retos reales que merecen una solución clara y sin complicaciones.
-           </p>
-           <p className="text-emerald-400 text-lg font-bold mb-16">Son urgentes, reales y muchas veces abandonados por falta de orientación.</p>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 text-left mb-12">
-              <ServiceCard 
-                number="1" 
-                title="Pensión alimenticia" 
-                desc="Uno de los problemas legales más frecuentes, urgentes y emocionalmente difíciles."
-                items={["Entender tus derechos y obligaciones básicas", "Preparar la solicitud", "Reunir y organizar pruebas", "Generar escritos base"]}
-                acompañamiento="Acompañarte hasta que el trámite quede presentado."
-              />
-              <ServiceCard 
-                number="2" 
-                title="Divorcio administrativo o voluntario" 
-                desc="Un trámite común, pero confuso si no sabes cómo hacerlo."
-                items={["Te explica los pasos reales del procedimiento", "Verifica si cumples los requisitos", "Generar documentos previos", "Te orientado para notaría si aplica"]}
-                acompañamiento="Te acompaña hasta el cierre del trámite."
-              />
-              <ServiceCard 
-                number="3" 
-                title="Arrendamiento (inquilino o propietario)" 
-                desc="Problemas diarios, tanto en ciudad como en zonas rurales."
-                items={["Cartas de requerimiento", "Contratos simples", "Avisos formales", "Organización del caso"]}
-                acompañamiento="Prevención de abusos."
-              />
-              <ServiceCard 
-                number="4" 
-                title="Cobro de adeudos pequeños (mercantil básico)" 
-                desc="La economía diaria también necesita respaldo legal."
-                items={["Pagarés", "Reconocimientos de deuda", "Cartas de cobro", "Orden del expediente"]}
-                acompañamiento="Justino prepara tu expediente para un cobro efectivo."
-              />
-           </div>
-
-           <div className="grid grid-cols-1 gap-10 text-left mb-20">
-              <div className="p-10 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-sm flex flex-col md:flex-row gap-12">
-                 <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">5</div>
-                      <h3 className="text-3xl font-bold text-white">Denuncias guiadas (delitos menores sin violencia)</h3>
-                    </div>
-                    <p className="text-slate-400 text-lg mb-6">Acceso básico a la justicia, sin miedo ni confusión.</p>
-                 </div>
-                 <div className="flex-1 space-y-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-emerald-400">Justino:</p>
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                       {["Te explica cómo denunciar", "Qué documentos llevar", "Qué esperar del proceso", "Genera narrativas claras"].map((t, i) => (
-                         <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                           <CheckCircle2 className="w-5 h-5 text-emerald-500/50 shrink-0 mt-0.5" /> {t}
-                         </li>
-                       ))}
-                    </ul>
-                    <p className="pt-4 text-xs italic text-slate-500 border-t border-white/5">Te acompaña sin estrategia penal.</p>
-                 </div>
+        {/* TODO ESTO POR */}
+        <section className="w-full max-w-4xl mx-auto mb-32">
+          <div className="bg-white rounded-[40px] p-12 md:p-16 text-slate-900 shadow-2xl text-center md:text-left">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600 mb-2">TODO ESTO POR</p>
+                <div className="flex justify-center md:justify-start items-baseline gap-2 mb-6">
+                  <span className="text-6xl md:text-7xl font-black text-slate-900">$400</span>
+                  <span className="text-xl font-bold text-emerald-600">MXN</span>
+                </div>
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 inline-block">
+                  <p className="text-slate-500 text-sm font-semibold">
+                    Sin mensualidades. Sin contratos. Sin volver a empezar.
+                  </p>
+                </div>
               </div>
-           </div>
-
-           {/* Caja roja de exclusión */}
-           <div className="bg-red-500/5 border border-red-500/20 rounded-3xl p-10 max-w-5xl mx-auto flex flex-col items-center gap-8">
-              <div className="flex items-center gap-3 text-red-400 font-bold uppercase tracking-widest text-sm">
-                 <AlertCircle className="w-5 h-5" /> Por tu seguridad y la de todos, Justino no atiende:
+              <div className="text-left bg-slate-50 p-8 md:p-10 rounded-3xl border border-slate-100">
+                <p className="font-bold text-slate-900 text-lg mb-6">Con un solo pago obtienes:</p>
+                <ul className="space-y-4">
+                  {[
+                    "Un caso abierto.",
+                    "Una estrategia personalizada.",
+                    "Los documentos que necesites.",
+                    "Una guía clara paso a paso.",
+                    "Un expediente que recuerda toda tu historia.",
+                    "Acceso a tu caso hasta que tú decidas cerrarlo."
+                  ].map((text, i) => (
+                    <li key={i} className="flex items-start gap-3 text-slate-700 text-sm md:text-base font-medium">
+                      <span className="text-emerald-500 font-bold shrink-0">✔</span>
+                      <span>{text}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="flex flex-wrap justify-center gap-5">
-                 {["DELITOS GRAVES", "VIOLENCIA EXTREMA", "CRIMEN ORGANIZADO", "CASOS FISCALES COMPLEJOS"].map((t, i) => (
-                   <span key={i} className="px-5 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-black text-red-400 tracking-wider">
-                     {t}
-                   </span>
-                 ))}
-              </div>
-           </div>
+            </div>
+          </div>
         </section>
 
-        {/* Justino se queda contigo */}
-        <section className="w-full max-w-5xl mx-auto mb-40 text-center">
-           <h2 className="text-4xl font-bold mb-6">Justino se queda contigo y con tu caso</h2>
-           <p className="text-slate-500 text-lg mb-16">Tu problema legal no se resuelve en un solo mensaje. Por eso, Justino:</p>
-           
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="p-10 bg-white/5 border border-white/10 rounded-3xl text-left flex gap-8">
-                 <div className="w-14 h-14 bg-blue-500/10 rounded-xl flex items-center justify-center shrink-0">
-                    <Zap className="w-7 h-7 text-blue-400" />
-                 </div>
-                 <div>
-                    <h3 className="font-bold text-xl text-white mb-3">Memoria Persistente</h3>
-                    <p className="text-sm text-slate-400 leading-relaxed">Mantiene la memoria de tu caso. Recuerda lo que ya explicaste y guarda los documentos que decidas subir.</p>
-                 </div>
-              </div>
-              <div className="p-10 bg-white/5 border border-white/10 rounded-3xl text-left flex gap-8">
-                 <div className="w-14 h-14 bg-emerald-500/10 rounded-xl flex items-center justify-center shrink-0">
-                    <Clock className="w-7 h-7 text-emerald-400" />
-                 </div>
-                 <div>
-                    <h3 className="font-bold text-xl text-white mb-3">Seguimiento Real</h3>
-                    <p className="text-sm text-slate-400 leading-relaxed">No tienes que volver a empezar desde cero. Si recibes una respuesta o un nuevo documento, Justino te ayuda a entenderlo.</p>
-                 </div>
-              </div>
-           </div>
+        {/* HECHO PARA MÉXICO */}
+        <section className="w-full max-w-4xl mx-auto mb-32 text-center">
+          <div className="border border-white/10 bg-white/5 p-12 rounded-[32px]">
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 tracking-tight uppercase text-emerald-400">
+              Hecho para México
+            </h2>
+            <p className="text-slate-300 text-lg md:text-xl max-w-3xl mx-auto leading-relaxed font-medium">
+              Justino utiliza la legislación vigente de México para ayudarte a comprender tu situación y orientarte de acuerdo con la autoridad y la jurisdicción que correspondan a tu caso.
+            </p>
+          </div>
         </section>
 
-        {/* Claro desde el inicio (Módulo Blanco) */}
-        <section className="w-full max-w-5xl mx-auto mb-40">
-           <div className="bg-white rounded-[40px] p-16 md:p-24 text-center shadow-2xl">
-              <h2 className="text-4xl md:text-5xl font-black text-navy-900 mb-8 tracking-tight">Claro desde el inicio</h2>
-              <p className="text-slate-500 text-lg md:text-xl mb-16 max-w-xl mx-auto font-medium">Justino no es un abogado tradicional ni un despacho.</p>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16">
-                 {[
-                   { label: "EXPLICA", color: "bg-blue-500" },
-                   { label: "ACOMPAÑA", color: "bg-emerald-500" },
-                   { label: "ORGANIZA", color: "bg-indigo-500" },
-                   { label: "PREPARA", color: "bg-amber-500" }
-                 ].map((step, i) => (
-                   <div key={i} className="p-6 bg-slate-50 rounded-2xl flex flex-col items-center gap-4">
-                      <div className={`w-3 h-3 rounded-full ${step.color}`} />
-                      <span className="text-xs font-black text-navy-900 tracking-widest">{step.label}</span>
-                   </div>
-                 ))}
-              </div>
+        {/* CTA FINAL */}
+        <section className="w-full max-w-4xl mx-auto mb-32 text-center">
+          <h2 className="text-4xl md:text-6xl font-extrabold mb-4 tracking-tight leading-none text-white">
+            Dar el primer paso cambia todo.
+          </h2>
+          <h3 className="text-2xl md:text-3xl font-medium text-emerald-400 mb-6">
+            Empieza hoy.
+          </h3>
+          <p className="text-slate-400 text-lg md:text-xl mb-12 max-w-xl mx-auto">
+            De lo demás se encargará Justino.
+          </p>
 
-              <p className="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto italic">
-                Justino te otorga la autonomía para defender tus derechos. Es una herramienta diseñada para que actúes con la misma precisión que un experto, eliminando obstáculos y gastos innecesarios.
-              </p>
-           </div>
-        </section>
-
-        {/* Empieza hoy, con claridad (ÚLTIMA PARTE) */}
-        <section className="w-full max-w-5xl mx-auto mb-32 text-center">
-           <h2 className="text-5xl md:text-6xl font-bold mb-8">Empieza hoy, con claridad</h2>
-           <p className="text-slate-400 text-xl md:text-2xl mb-12 max-w-2xl mx-auto leading-relaxed">
-             No tienes que saber de leyes. Solo tienes que decidir no quedarte detenido.
-           </p>
-
-           <button 
+          <button 
             onClick={onStart}
-            className="group px-14 py-7 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-2xl transition-all shadow-2xl hover:-translate-y-1 flex items-center gap-4 mx-auto"
+            className="group px-14 py-7 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-2xl transition-all shadow-2xl hover:-translate-y-1 flex items-center gap-4 mx-auto uppercase tracking-wider"
           >
-            Iniciar mi caso ahora
+            Quiero empezar mi caso
             <ArrowRight className="w-7 h-7 group-hover:translate-x-1 transition-transform" />
           </button>
-
-          <p className="mt-12 text-xs font-bold text-slate-600 uppercase tracking-[0.4em]">
-            DISEÑADO PARA MÉXICO · PENSADO PARA PERSONAS REALES
-          </p>
         </section>
 
       </main>
