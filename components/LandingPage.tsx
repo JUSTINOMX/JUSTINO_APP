@@ -198,6 +198,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
                     Sin mensualidades. Sin contratos. Sin volver a empezar.
                   </p>
                 </div>
+                <div>
+                  <button 
+                    onClick={onStart}
+                    className="group w-full md:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold text-base transition-all shadow-lg hover:-translate-y-0.5 flex items-center justify-center gap-2 uppercase tracking-wider"
+                  >
+                    Quiero empezar mi caso
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
               </div>
               <div className="text-left bg-slate-50 p-8 md:p-10 rounded-3xl border border-slate-100">
                 <p className="font-bold text-slate-900 text-lg mb-6">Con un solo pago obtienes:</p>
