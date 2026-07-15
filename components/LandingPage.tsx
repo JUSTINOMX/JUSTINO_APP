@@ -46,6 +46,7 @@ const ServiceCard = ({ number, title, desc, items, acompañamiento }: any) => (
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAdminAccess, hasExistingSession }) => {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [showContact, setShowContact] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-hidden">
@@ -282,7 +283,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
            <div className="flex flex-wrap justify-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
              <button onClick={() => setShowPrivacy(true)} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
              <button onClick={() => setShowTerms(true)} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
-             <button onClick={() => window.location.href = 'mailto:contacto@justino.app'} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
+             <button onClick={() => setShowContact(true)} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
              <button onClick={onAdminAccess} className="opacity-0 w-0 h-0 p-0 overflow-hidden">Admin</button>
            </div>
         </div>
@@ -596,6 +597,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
             <div className="px-8 py-4 border-t border-white/5 bg-[#080D1A] shrink-0 text-right">
               <button 
                 onClick={() => setShowTerms(false)}
+                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all text-sm"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONTACTO */}
+      {showContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="relative w-full max-w-lg bg-[#0B1224] border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center px-8 py-6 border-b border-white/5 shrink-0">
+              <h2 className="text-xl font-bold uppercase tracking-wide text-white">Contacto</h2>
+              <button 
+                onClick={() => setShowContact(false)} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-8 text-slate-300 space-y-6 text-base leading-relaxed">
+              <p className="font-semibold text-white">
+                JUSTINO es una APP desarrollada en México por NeuronConnect S.A.S. de C.V.
+              </p>
+              <p>
+                Si tienes algún comentario referente a Justino Visítanos en <a href="https://www.neuronconnect.mx" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline font-bold">www.neuronconnect.mx</a> para que uno de nuestros agentes te atienda.
+              </p>
+              <p className="text-sm text-slate-400 italic">
+                Apreciamos mucho tu retroalimentación.
+              </p>
+            </div>
+            <div className="px-8 py-4 border-t border-white/5 bg-[#080D1A] shrink-0 text-right">
+              <button 
+                onClick={() => setShowContact(false)}
                 className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all text-sm"
               >
                 Entendido
