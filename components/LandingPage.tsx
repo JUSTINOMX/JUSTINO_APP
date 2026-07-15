@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRight, X, AlertCircle, Info, Clock, CheckCircle2, Search, FileText, Zap } from 'lucide-react';
 import { Logo } from './Logo';
 
@@ -44,6 +44,9 @@ const ServiceCard = ({ number, title, desc, items, acompañamiento }: any) => (
 );
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAdminAccess, hasExistingSession }) => {
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+
   return (
     <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-hidden">
       
@@ -277,13 +280,330 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
            </div>
            
            <div className="flex flex-wrap justify-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
-             <button onClick={() => {}} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
-             <button onClick={() => {}} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
-             <button onClick={() => {}} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
+             <button onClick={() => setShowPrivacy(true)} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
+             <button onClick={() => setShowTerms(true)} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
+             <button onClick={() => window.location.href = 'mailto:contacto@justino.app'} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
              <button onClick={onAdminAccess} className="opacity-0 w-0 h-0 p-0 overflow-hidden">Admin</button>
            </div>
         </div>
       </footer>
+
+      {/* MODAL AVISO DE PRIVACIDAD */}
+      {showPrivacy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl bg-[#0B1224] border border-white/10 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center px-8 py-6 border-b border-white/5 shrink-0">
+              <h2 className="text-xl font-bold uppercase tracking-wide text-white">Aviso de Privacidad</h2>
+              <button 
+                onClick={() => setShowPrivacy(false)} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-8 overflow-y-auto text-slate-300 space-y-6 text-sm leading-relaxed">
+              <p className="text-emerald-400 font-bold uppercase tracking-wider text-xs font-black">AVISO DE PRIVACIDAD DE JUSTINO Versión 1.0</p>
+              
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">1. RESPONSABLE DEL TRATAMIENTO</h3>
+                <p>
+                  Justino es responsable del tratamiento de los datos personales recabados a través de su plataforma y se compromete a protegerlos conforme a la legislación mexicana aplicable.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">2. DATOS QUE RECABAMOS</h3>
+                <p className="mb-2">Dependiendo del uso de la plataforma, podremos solicitar:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Nombre.</li>
+                  <li>Correo electrónico.</li>
+                  <li>Número telefónico.</li>
+                  <li>Datos de acceso a la cuenta.</li>
+                  <li>Información contenida en consultas jurídicas.</li>
+                  <li>Documentos cargados por el usuario.</li>
+                  <li>Evidencias, imágenes y archivos.</li>
+                  <li>Información técnica del dispositivo y uso de la plataforma.</li>
+                </ul>
+                <p className="mt-3">
+                  Justino no solicita deliberadamente datos personales sensibles. Si el usuario decide proporcionarlos dentro de una consulta o documento, serán tratados únicamente para atender el servicio solicitado.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">3. FINALIDAD DEL TRATAMIENTO</h3>
+                <p className="mb-2">Los datos personales se utilizan para:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Crear y administrar la cuenta del usuario.</li>
+                  <li>Responder consultas.</li>
+                  <li>Generar documentos y expedientes.</li>
+                  <li>Mejorar la precisión de las respuestas.</li>
+                  <li>Dar soporte técnico.</li>
+                  <li>Prevenir fraude, abuso o usos indebidos.</li>
+                  <li>Cumplir obligaciones legales.</li>
+                  <li>Mejorar continuamente la plataforma.</li>
+                </ul>
+                <p className="mt-3 font-semibold text-emerald-400">
+                  No venderemos los datos personales de nuestros usuarios.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">4. USO DE INTELIGENCIA ARTIFICIAL</h3>
+                <p>
+                  Las consultas, documentos e información proporcionada por el usuario podrán ser procesados mediante modelos de inteligencia artificial para generar respuestas, organizar información y elaborar documentos.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">5. ALMACENAMIENTO Y SEGURIDAD</h3>
+                <p>
+                  Justino implementa medidas técnicas y administrativas razonables para proteger la información contra pérdida, acceso no autorizado, alteración o divulgación.
+                </p>
+                <p className="mt-2 text-slate-400 italic">
+                  Aunque empleamos medidas de seguridad, ningún sistema conectado a Internet puede garantizar una seguridad absoluta.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">6. COMPARTICIÓN DE INFORMACIÓN</h3>
+                <p className="mb-2">Los datos podrán compartirse únicamente cuando:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Sea necesario para operar la plataforma mediante proveedores tecnológicos.</li>
+                  <li>Exista obligación legal.</li>
+                  <li>Lo solicite una autoridad competente conforme a la ley.</li>
+                </ul>
+                <p className="mt-3">
+                  Fuera de estos casos, la información no será vendida ni comercializada.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">7. CONSERVACIÓN DE LA INFORMACIÓN</h3>
+                <p>
+                  Los datos se conservarán únicamente durante el tiempo necesario para prestar el servicio, cumplir obligaciones legales o atender solicitudes del usuario.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">8. DERECHOS DEL USUARIO</h3>
+                <p>
+                  El usuario podrá solicitar el acceso, rectificación, actualización, cancelación o eliminación de sus datos personales, así como oponerse a determinados tratamientos, conforme a la legislación aplicable.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">9. COOKIES Y TECNOLOGÍAS SIMILARES</h3>
+                <p>
+                  La plataforma puede utilizar cookies y tecnologías similares para recordar preferencias, mantener sesiones, mejorar la experiencia del usuario y obtener estadísticas de funcionamiento.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">10. MENORES DE EDAD</h3>
+                <p>
+                  La plataforma no está dirigida a menores de edad sin la supervisión de su padre, madre o tutor legal.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">11. CAMBIOS AL AVISO</h3>
+                <p>
+                  Justino podrá modificar este Aviso de Privacidad cuando sea necesario. La versión vigente será la publicada en la plataforma.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">12. CONTACTO</h3>
+                <p>
+                  Para cualquier solicitud relacionada con este Aviso de Privacidad o con el tratamiento de datos personales, el usuario podrá comunicarse mediante los canales oficiales publicados en el sitio web de Justino.
+                </p>
+              </div>
+
+              <div className="pt-6 border-t border-white/5 text-xs text-slate-400">
+                Al utilizar la plataforma, el usuario reconoce haber leído y comprendido este Aviso de Privacidad y acepta el tratamiento de sus datos conforme a lo aquí establecido.
+              </div>
+            </div>
+            <div className="px-8 py-4 border-t border-white/5 bg-[#080D1A] shrink-0 text-right">
+              <button 
+                onClick={() => setShowPrivacy(false)}
+                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all text-sm"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TÉRMINOS Y CONDICIONES */}
+      {showTerms && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl bg-[#0B1224] border border-white/10 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center px-8 py-6 border-b border-white/5 shrink-0">
+              <h2 className="text-xl font-bold uppercase tracking-wide text-white">Términos y Condiciones</h2>
+              <button 
+                onClick={() => setShowTerms(false)} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-8 overflow-y-auto text-slate-300 space-y-6 text-sm leading-relaxed animate-in fade-in duration-300">
+              <p className="text-emerald-400 font-bold uppercase tracking-wider text-xs font-black">TÉRMINOS Y CONDICIONES DE USO DE JUSTINO Versión 2.0</p>
+              
+              <div className="bg-amber-500/5 border border-amber-500/10 p-6 rounded-2xl">
+                <h3 className="text-amber-400 font-bold text-sm uppercase tracking-wider mb-2">Aviso Importante</h3>
+                <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
+                  Justino es una plataforma tecnológica de orientación jurídica basada en inteligencia artificial. No es un despacho jurídico, no presta servicios de representación legal, no sustituye la asesoría profesional de un abogado ni garantiza resultados en procedimientos administrativos o judiciales. Toda la información y los documentos generados tienen fines informativos y de apoyo para el usuario.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">1. OBJETO</h3>
+                <p>
+                  Estos Términos y Condiciones regulan el acceso y uso de la plataforma Justino. Al utilizar la plataforma, el usuario acepta íntegramente su contenido.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">2. ¿QUÉ ES JUSTINO?</h3>
+                <p>
+                  Justino ayuda a comprender temas jurídicos, explicar procedimientos, organizar expedientes, identificar documentación relevante y generar borradores de documentos con base en la información proporcionada por el usuario y en legislación mexicana disponible en fuentes públicas al momento de la consulta.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">3. ALCANCE DEL SERVICIO</h3>
+                <p className="mb-2">Justino puede:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Explicar conceptos jurídicos.</li>
+                  <li>Orientar sobre procedimientos.</li>
+                  <li>Organizar información y evidencia.</li>
+                  <li>Elaborar borradores de contratos, escritos, solicitudes, cartas y otros documentos.</li>
+                  <li>Ayudar al usuario a preparar su expediente.</li>
+                </ul>
+                <p className="mt-3 text-slate-400 italic">
+                  La información proporcionada constituye una guía tecnológica y no una opinión jurídica vinculante.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">4. LO QUE JUSTINO NO HACE</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Justino no ejerce la profesión de abogado.</li>
+                  <li>No representa usuarios ante autoridades o tribunales.</li>
+                  <li>No interpone demandas, recursos o denuncias.</li>
+                  <li>No firma documentos en nombre del usuario.</li>
+                  <li>No garantiza el éxito de ningún trámite o procedimiento.</li>
+                  <li>No sustituye el criterio profesional de un abogado cuando las circunstancias del caso requieran asesoría especializada.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">5. DOCUMENTOS GENERADOS</h3>
+                <p className="mb-2">
+                  Los documentos elaborados por Justino son borradores generados automáticamente con la información proporcionada por el usuario.
+                </p>
+                <p className="mb-2">
+                  Antes de utilizarlos, el usuario deberá revisarlos cuidadosamente, verificar su contenido y realizar las modificaciones que considere necesarias.
+                </p>
+                <p className="mb-2">
+                  Cuando la ley exija firma, ratificación, protocolización, certificación, presentación ante una autoridad o cualquier otro requisito formal, será responsabilidad exclusiva del usuario cumplir con dichas formalidades.
+                </p>
+                <p className="font-semibold text-emerald-400">
+                  La generación de un documento dentro de la plataforma no le otorga por sí misma validez jurídica.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">6. INFORMACIÓN PROPORCIONADA POR EL USUARIO</h3>
+                <p>
+                  El usuario declara que la información que ingresa es veraz, completa y actualizada. Justino genera sus respuestas con base en dicha información. Si ésta resulta falsa, incompleta, incorrecta o desactualizada, los resultados también podrán serlo.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">7. RESPONSABILIDAD DEL USUARIO</h3>
+                <p className="mb-2">El usuario es el único responsable de:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Revisar la información recibida.</li>
+                  <li>Verificar los documentos generados.</li>
+                  <li>Decidir si utiliza o no las recomendaciones de la plataforma.</li>
+                  <li>Presentar documentos ante autoridades.</li>
+                  <li>Cumplir plazos y requisitos legales.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">8. LIMITACIÓN DE RESPONSABILIDAD</h3>
+                <p className="mb-2">Justino no será responsable por:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Decisiones tomadas por el usuario.</li>
+                  <li>Información falsa, incompleta o incorrecta proporcionada por el usuario.</li>
+                  <li>Pérdida de derechos por omisiones o vencimiento de plazos.</li>
+                  <li>Cambios posteriores en la legislación.</li>
+                  <li>Criterios emitidos por jueces o autoridades.</li>
+                  <li>Errores derivados de información pública incorrecta.</li>
+                  <li>Resultados de procedimientos administrativos, judiciales o extrajudiciales.</li>
+                  <li>Daños directos o indirectos derivados del uso de la plataforma.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">9. ACTUALIZACIÓN DE LA INFORMACIÓN</h3>
+                <p>
+                  Justino procura mantener su contenido actualizado conforme a la legislación mexicana publicada en fuentes oficiales. Sin embargo, las leyes, reglamentos, criterios judiciales y procedimientos pueden modificarse sin previo aviso, por lo que la plataforma no garantiza que toda la información permanezca permanentemente actualizada.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">10. USO PERMITIDO</h3>
+                <p className="mb-2">El usuario se compromete a utilizar la plataforma únicamente para fines lícitos. Queda prohibido utilizar Justino para:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Generar documentos falsos.</li>
+                  <li>Suplantar identidad.</li>
+                  <li>Cometer fraudes o cualquier actividad ilícita.</li>
+                  <li>Vulnerar derechos de terceros.</li>
+                  <li>Intentar afectar la seguridad o funcionamiento de la plataforma.</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">11. PROPIEDAD INTELECTUAL</h3>
+                <p>
+                  Todo el software, diseño, contenido, algoritmos, bases de datos, textos, logotipos, marcas e identidad visual de Justino se encuentran protegidos por la legislación aplicable sobre propiedad intelectual. Ningún elemento podrá reproducirse, distribuirse o explotarse sin autorización.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">12. MODIFICACIONES</h3>
+                <p>
+                  Justino podrá modificar estos Términos y Condiciones en cualquier momento. Las nuevas versiones surtirán efectos desde su publicación. El uso continuo de la plataforma implica la aceptación de dichas modificaciones.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-white font-bold text-base mb-2">13. LEGISLACIÓN APLICABLE</h3>
+                <p>
+                  Estos Términos y Condiciones se regirán por las leyes de los Estados Unidos Mexicanos. Cualquier controversia será resuelta por las autoridades competentes conforme a la legislación aplicable.
+                </p>
+              </div>
+
+              <div className="pt-6 border-t border-white/5 text-xs text-slate-400">
+                Al utilizar Justino, el usuario manifiesta haber leído, comprendido y aceptado estos Términos y Condiciones.
+              </div>
+            </div>
+            <div className="px-8 py-4 border-t border-white/5 bg-[#080D1A] shrink-0 text-right">
+              <button 
+                onClick={() => setShowTerms(false)}
+                className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all text-sm"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
