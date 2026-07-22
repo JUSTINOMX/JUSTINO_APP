@@ -3,9 +3,9 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "rewrites": [
-    { "source": "/blog", "destination": "/server" },
-    { "source": "/blog/(.*)", "destination": "/server" },
-    { "source": "/sitemap.xml", "destination": "/server" },
-    { "source": "/robots.txt", "destination": "/server" }
+    { "source": "/blog", "destination": "/api/server" },
+    { "source": "/blog/(.*)", "destination": "/api/server" },
+    { "source": "/sitemap.xml", "destination": "/api/server" },
+    { "source": "/robots.txt", "destination": "/api/server" }
   ]
 }
