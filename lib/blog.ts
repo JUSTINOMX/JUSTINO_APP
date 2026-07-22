@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { renderMarkdown, cleanBlogMarkdown } from "./markdown";
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY!;
 const BASE = "https://justino.app";
 
 function sb() {
-  return createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: false } });
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "";
+  return createClient(url, anonKey, { auth: { persistSession: false } });
 }
 
 function escapeHtml(s: string): string {
@@ -130,7 +130,7 @@ function buildJsonLd(row: any): object[] {
 }
 
 export function setupBlogRoutes(app: Express) {
-  app.get("/blog", async (req, res) => {
+  app.get(["/blog", "/blog/"], async (req, res) => {
     try {
       const supabase = sb();
       const { data, error } = await supabase
