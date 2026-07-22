@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { createServer as createViteServer } from "vite";
 import { generateResponse } from "./services/ai-provider";
 import { setupBlogRoutes } from "./lib/blog";
 
@@ -299,9 +298,11 @@ const debugLog = (msg: string) => {
   const isServerless = !!process.env.VERCEL;
   if (!isServerless && process.env.NODE_ENV !== "production") {
     debugLog("Starting in DEVELOPMENT mode with Vite middleware");
-    createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    import("vite").then(({ createServer: createViteServer }) => {
+      return createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
     }).then((vite) => {
       app.use(vite.middlewares);
       app.listen(PORT, "0.0.0.0", () => {
