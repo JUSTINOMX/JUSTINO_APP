@@ -2,17 +2,17 @@
   "builds": [
     {
       "src": "dist/server.cjs",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["dist/**"]
+      }
     }
   ],
-  "rewrites": [
-    { "source": "/blog", "destination": "/dist/server.cjs" },
-    { "source": "/blog/(.*)", "destination": "/dist/server.cjs" },
-    { "source": "/sitemap.xml", "destination": "/dist/server.cjs" },
-    { "source": "/robots.txt", "destination": "/dist/server.cjs" },
-    { "source": "/api/v1/chat", "destination": "/api/v1/chat" },
-    { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/api/(.*)", "destination": "/dist/server.cjs" },
-    { "source": "/((?!blog|sitemap.xml|robots.txt|api/).*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/blog", "dest": "/dist/server.cjs" },
+    { "src": "/blog/(.*)", "dest": "/dist/server.cjs" },
+    { "src": "/sitemap.xml", "dest": "/dist/server.cjs" },
+    { "src": "/robots.txt", "dest": "/dist/server.cjs" },
+    { "src": "/((?!blog|sitemap.xml|robots.txt|api/).*)", "dest": "/index.html" }
   ]
 }

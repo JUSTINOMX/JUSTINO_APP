@@ -9,16 +9,15 @@ import fs from "fs";
 
 import rateLimit from 'express-rate-limit';
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  // trust proxy is important for Cloud Run/container environments to get real user IP
-  app.set('trust proxy', 1);
+// trust proxy is important for Cloud Run/container environments to get real user IP
+app.set('trust proxy', 1);
 
-  const debugLog = (msg: string) => {
-    console.log(`[${new Date().toISOString()}] ${msg}`);
-  };
+const debugLog = (msg: string) => {
+  console.log(`[${new Date().toISOString()}] ${msg}`);
+};
 
   app.use(cors());
 
@@ -299,11 +298,17 @@ async function startServer() {
   // Vite for dev
   if (process.env.NODE_ENV !== "production") {
     debugLog("Starting in DEVELOPMENT mode with Vite middleware");
-    const vite = await createViteServer({
+    createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running at http://0.0.0.0:${PORT}`);
+      });
+    }).catch((err) => {
+      console.error("Error starting Vite server:", err);
     });
-    app.use(vite.middlewares);
   } else {
     debugLog("Starting in PRODUCTION mode serving dist folder");
     const distPath = path.join(process.cwd(), "dist");
@@ -317,11 +322,4 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
-  });
-
-  return app;
-}
-
-export default startServer();
+export default app;
