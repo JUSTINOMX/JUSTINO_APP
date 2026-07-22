@@ -1,8 +1,18 @@
 {
+  "builds": [
+    {
+      "src": "dist/server.cjs",
+      "use": "@vercel/node"
+    }
+  ],
   "rewrites": [
+    { "source": "/blog", "destination": "/dist/server.cjs" },
+    { "source": "/blog/(.*)", "destination": "/dist/server.cjs" },
+    { "source": "/sitemap.xml", "destination": "/dist/server.cjs" },
+    { "source": "/robots.txt", "destination": "/dist/server.cjs" },
     { "source": "/api/v1/chat", "destination": "/api/v1/chat" },
     { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/api/(.*)", "destination": "/api/v1/chat" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/dist/server.cjs" },
+    { "source": "/((?!blog|sitemap.xml|robots.txt|api/).*)", "destination": "/index.html" }
   ]
 }
