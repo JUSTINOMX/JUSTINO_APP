@@ -296,7 +296,8 @@ const debugLog = (msg: string) => {
   setupBlogRoutes(app);
 
   // Vite for dev
-  if (process.env.NODE_ENV !== "production") {
+  const isServerless = !!process.env.VERCEL;
+  if (!isServerless && process.env.NODE_ENV !== "production") {
     debugLog("Starting in DEVELOPMENT mode with Vite middleware");
     createViteServer({
       server: { middlewareMode: true },
