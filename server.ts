@@ -3,6 +3,7 @@ import path from "path";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import { generateResponse } from "./services/ai-provider";
+import { setupBlogRoutes } from "./lib/blog";
 
 import fs from "fs";
 
@@ -291,6 +292,9 @@ async function startServer() {
     debugLog(`[404] API Route not found: ${req.method} ${req.url}`);
     res.status(404).json({ error: "Ruta de API no encontrada", path: req.url });
   });
+
+  // Setup blog routes (SSR)
+  setupBlogRoutes(app);
 
   // Vite for dev
   if (process.env.NODE_ENV !== "production") {
