@@ -27,7 +27,7 @@ function baseLayout(opts: {
     .join("\n");
   const ogImage = opts.ogImage || "";
   return `<!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="h-full bg-slate-50">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -44,21 +44,63 @@ ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />` : ""
 <meta name="twitter:description" content="${escapeHtml(opts.description)}" />
 ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  .jst-article { color: #334155; line-height: 1.8; font-size: 1.0625rem; }
+  .jst-article h2 { color: #0f172a; font-weight: 700; font-size: 1.5rem; margin-top: 2.25rem; margin-bottom: 0.875rem; tracking: -0.015em; }
+  .jst-article h3 { color: #1e293b; font-weight: 600; font-size: 1.25rem; margin-top: 1.75rem; margin-bottom: 0.625rem; }
+  .jst-article p { margin-top: 1rem; margin-bottom: 1rem; }
+  .jst-article ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.875rem; margin-bottom: 0.875rem; }
+  .jst-article ol { list-style-type: decimal; padding-left: 1.5rem; margin-top: 0.875rem; margin-bottom: 0.875rem; }
+  .jst-article li { margin-top: 0.375rem; margin-bottom: 0.375rem; }
+  .jst-article blockquote { border-left: 4px solid #10b981; background-color: #ecfdf5; padding: 0.875rem 1.125rem; border-radius: 0 0.75rem 0.75rem 0; margin: 1.5rem 0; font-style: italic; color: #334155; }
+  .jst-article a { color: #059669; text-decoration: underline; font-weight: 500; }
+  .jst-article a:hover { color: #047857; }
+  .jst-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  @media (min-width: 640px) { .jst-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .jst-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 1rem; overflow: hidden; transition: all 0.2s ease-in-out; display: flex; flex-direction: column; }
+  .jst-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.01); border-color: #a7f3d0; }
+  .jst-cta { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; border-radius: 1.25rem; padding: 2rem 1.5rem; text-align: center; margin-top: 3.5rem; }
+</style>
 ${ld}
 </head>
-<body class="bg-gray-50 text-gray-900">
-<header class="border-b bg-white">
-  <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-    <a href="/" class="font-bold text-xl text-indigo-700">Justino</a>
-    <a href="/blog" class="text-sm text-gray-600 hover:text-indigo-700">Blog</a>
+<body class="bg-slate-50 text-slate-900 min-h-full flex flex-col">
+<header class="border-b border-slate-200/80 bg-white sticky top-0 z-50 backdrop-blur-md bg-white/95">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <a href="/" class="flex items-center gap-2.5 text-slate-900 font-bold text-xl tracking-tight group">
+      <svg class="w-8 h-8 text-emerald-600 flex-shrink-0 group-hover:scale-105 transition-transform" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#10B981"/>
+        <path d="M10 10H22M16 10V22M12 22H20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Justino</span>
+    </a>
+    <nav class="flex items-center gap-4 sm:gap-6">
+      <a href="/" class="text-sm font-medium text-slate-600 hover:text-emerald-600 transition">Inicio</a>
+      <a href="/blog" class="text-sm font-medium text-emerald-600 hover:text-emerald-700 font-semibold">Blog</a>
+      <a href="/" class="inline-flex items-center justify-center px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition">
+        Abrir expediente
+      </a>
+    </nav>
   </div>
 </header>
-<main class="max-w-3xl mx-auto px-4 py-8">
+<main class="flex-grow max-w-[44rem] w-full mx-auto px-4 sm:px-6 py-8 sm:py-12">
 ${opts.bodyHtml}
 </main>
-<footer class="border-t bg-white mt-12">
-  <div class="max-w-3xl mx-auto px-4 py-6 text-sm text-gray-500">
-    Justino · Asistente legal digital de México
+<footer class="border-t border-slate-200 bg-white mt-16 py-10">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+    <div class="flex items-center gap-2 text-slate-900 font-semibold text-sm">
+      <svg class="w-5 h-5 text-emerald-600" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#10B981"/>
+        <path d="M10 10H22M16 10V22M12 22H20" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Justino · Asistente legal digital de México
+    </div>
+    <div class="text-xs text-slate-500">
+      © ${new Date().getFullYear()} Justino. Todos los derechos reservados.
+    </div>
   </div>
 </footer>
 </body>
@@ -67,18 +109,35 @@ ${opts.bodyHtml}
 
 function articleBodyHtml(row: any): string {
   const hero = row.featured_image_url
-    ? `<img src="${escapeHtml(row.featured_image_url)}" alt="${escapeHtml(row.h1 || row.title)}" class="w-full rounded-xl mb-6" />`
+    ? `<img src="${escapeHtml(row.featured_image_url)}" alt="${escapeHtml(row.h1 || row.title)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
     : "";
   const body = renderMarkdown(cleanBlogMarkdown(row.markdown || ""));
+  const areaTag = row.area
+    ? `<span class="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full mb-3">${escapeHtml(row.area)}</span>`
+    : "";
+  const dateStr = row.published_at || row.created_at
+    ? `<time class="text-xs text-slate-500 font-medium">${new Date(row.published_at || row.created_at).toLocaleDateString("es-MX", { year: "numeric", month: "long", day: "numeric" })}</time>`
+    : "";
+
   const cta = `
-  <div class="mt-10 p-6 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
-    <p class="text-lg font-semibold text-indigo-800">No estás sola. Abre tu expediente en Justino.</p>
-    <a href="/" class="inline-block mt-3 px-5 py-2 bg-indigo-700 text-white rounded-lg font-medium hover:bg-indigo-800">Abrir mi expediente</a>
+  <div class="jst-cta">
+    <h3 class="text-xl sm:text-2xl font-bold text-slate-900 mb-2">¿Tienes una duda legal o un problema por resolver?</h3>
+    <p class="text-slate-600 text-sm sm:text-base max-w-md mx-auto mb-6">Justino analiza tu caso gratis, te explica tus derechos en lenguaje claro y te guía paso a paso.</p>
+    <a href="/" class="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold text-sm rounded-xl hover:bg-emerald-700 transition shadow-sm">
+      Abrir mi expediente sin costo
+    </a>
   </div>`;
-  return `${hero}
-<h1 class="text-3xl font-bold mb-4">${escapeHtml(row.h1 || row.title)}</h1>
-<div class="prose max-w-none">${body}</div>
-${cta}`;
+
+  return `<article class="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-10 shadow-sm">
+${hero}
+<header class="mb-8 border-b border-slate-100 pb-6">
+  ${areaTag}
+  <h1 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">${escapeHtml(row.h1 || row.title)}</h1>
+  ${dateStr ? `<div class="flex items-center gap-2">${dateStr}</div>` : ""}
+</header>
+<div class="jst-article">${body}</div>
+${cta}
+</article>`;
 }
 
 function buildJsonLd(row: any): object[] {
@@ -139,25 +198,34 @@ export function setupBlogRoutes(app: Express) {
         .eq("estado", "publicado")
         .order("published_at", { ascending: false });
       if (error) throw error;
+
       const list = (data || [])
         .map(
           (r: any) => `
-        <a href="/blog/${r.slug}" class="block border rounded-xl overflow-hidden hover:shadow-md transition bg-white">
-          ${r.featured_image_url ? `<img src="${escapeHtml(r.featured_image_url)}" class="w-full h-48 object-cover" />` : ""}
-          <div class="p-4">
-            <span class="text-xs text-indigo-600 font-medium">${escapeHtml(r.area || "")}</span>
-            <h2 class="text-xl font-semibold mt-1">${escapeHtml(r.h1 || r.title)}</h2>
-            <p class="text-gray-600 text-sm mt-2">${escapeHtml(r.meta_description || "")}</p>
+        <a href="/blog/${r.slug}" class="jst-card group">
+          ${r.featured_image_url ? `<div class="aspect-video w-full overflow-hidden bg-slate-100"><img src="${escapeHtml(r.featured_image_url)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="${escapeHtml(r.h1 || r.title)}" /></div>` : ""}
+          <div class="p-5 flex flex-col flex-grow">
+            ${r.area ? `<span class="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full w-fit mb-2">${escapeHtml(r.area)}</span>` : ""}
+            <h2 class="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors leading-snug mb-2">${escapeHtml(r.h1 || r.title)}</h2>
+            <p class="text-slate-600 text-sm line-clamp-3 mb-4 flex-grow leading-relaxed">${escapeHtml(r.meta_description || "")}</p>
+            <span class="text-xs font-semibold text-emerald-600 flex items-center gap-1 group-hover:translate-x-1 transition-transform">Leer guía legal →</span>
           </div>
         </a>`
         )
         .join("");
+
       const html = baseLayout({
         title: "Blog legal de Justino | Guías para mexicanos",
         description:
           "Artículos claros sobre problemas legales en México. Justino te acompaña caso por caso.",
         canonical: `${BASE}/blog`,
-        bodyHtml: `<h1 class="text-3xl font-bold mb-6">Blog de Justino</h1><div class="grid gap-6 sm:grid-cols-2">${list}</div>`,
+        bodyHtml: `
+        <div class="text-center mb-10">
+          <span class="inline-block px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full mb-3">Guías y Orientación Legal</span>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">Blog de Justino</h1>
+          <p class="text-slate-600 text-base sm:text-lg max-w-xl mx-auto">Explicaciones sencillas sobre tus derechos y trámites legales en México.</p>
+        </div>
+        <div class="jst-grid">${list}</div>`,
         jsonLd: [],
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -222,3 +290,4 @@ export function setupBlogRoutes(app: Express) {
     res.send(`User-agent: *\nAllow: /\n\nSitemap: ${BASE}/sitemap.xml`);
   });
 }
+
