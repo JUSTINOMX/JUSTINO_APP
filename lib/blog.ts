@@ -49,10 +49,13 @@ const ARTICLE_CSS = `
   .jst-article th,.jst-article td{border:1px solid #E2E8F0;padding:0.6rem 0.8rem;text-align:left;}
   .jst-article th{background:#F1F5F9;color:#064E3B;}
   .jst-card{max-width:44rem;margin:0 auto;}
-  .jst-cta{margin-top:2.5rem;padding:1.75rem;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:1rem;text-align:center;}
-  .jst-cta p{color:#065F46;font-weight:600;font-size:1.1rem;margin-bottom:1rem;}
-  .jst-cta a{display:inline-block;background:#10B981;color:#fff;padding:0.75rem 1.5rem;border-radius:0.75rem;font-weight:600;text-decoration:none;}
-  .jst-cta a:hover{background:#059669;}
+  .jst-cta{margin-top:2.5rem;padding:2rem;background:linear-gradient(135deg,#ECFDF5 0%,#D1FAE5 100%);border:1px solid #A7F3D0;border-radius:1.25rem;text-align:center;box-shadow:0 10px 30px -12px rgba(16,185,129,.35);}
+  .jst-cta .jst-cta-icon{width:2.75rem;height:2.75rem;margin:0 auto 0.75rem;display:flex;align-items:center;justify-content:center;border-radius:9999px;background:#10B981;color:#fff;}
+  .jst-cta h3{color:#064E3B;font-weight:700;font-size:1.25rem;margin:0 0 .4rem;line-height:1.3;}
+  .jst-cta p{color:#065F46;font-size:1rem;margin:0 0 1.1rem;max-width:32rem;margin-left:auto;margin-right:auto;line-height:1.6;}
+  .jst-cta a{display:inline-flex;align-items:center;gap:.5rem;background:#10B981;color:#fff;padding:0.85rem 1.75rem;border-radius:0.85rem;font-weight:600;font-size:1.05rem;text-decoration:none;transition:background .2s,transform .15s;box-shadow:0 6px 16px -6px rgba(16,185,129,.6);}
+  .jst-cta a:hover{background:#059669;transform:translateY(-1px);}
+  .jst-cta a svg{width:1.1rem;height:1.1rem;}
   .jst-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(18rem,1fr));gap:1.5rem;margin-top:1.5rem;}
   .jst-card-item{display:block;background:#fff;border:1px solid #E2E8F0;border-radius:1rem;overflow:hidden;transition:box-shadow .2s,transform .2s;}
   .jst-card-item:hover{box-shadow:0 10px 25px -5px rgba(16,185,129,.25);transform:translateY(-2px);}
@@ -125,16 +128,97 @@ function articleBodyHtml(row: any): string {
     ? `<img src="${escapeHtml(row.featured_image_url)}" alt="${escapeHtml(row.h1 || row.title)}" />`
     : "";
   const body = renderMarkdown(cleanBlogMarkdown(row.markdown || ""));
-  const cta = `
+
+  // CTA dinámico por área: refleja el dolor del tema y cierra con el
+  // pequeño primer paso (disparador de acción de A.D.C.A.R.). Sin "gratis"/
+  // "sin costo" (regla SEJ-03 3.6).
+  const ctaByArea: Record<string, { title: string; sub: string; btn: string }> = {
+    Familiar: {
+      title: "Tu familia no debería pagar por lo que ya es suyo",
+      sub: "Abre tu expediente y deja que Justino ordene los depósitos, las pruebas y los pasos siguientes por ti.",
+      btn: "Abrir mi expediente",
+    },
+    Laboral: {
+      title: "Lo que te deben por tu trabajo sigue siendo tuyo",
+      sub: "Abre tu expediente y Justino organiza tu caso, tus pruebas y tu siguiente paso sin que adivines nada.",
+      btn: "Abrir mi expediente",
+    },
+    Consumidor: {
+      title: "No tienes que aguantar lo que no es justo",
+      sub: "Abre tu expediente y Justino aclara tus derechos y qué hacer con ese cobro o producto que te afecta.",
+      btn: "Abrir mi expediente",
+    },
+    Deudas: {
+      title: "La deuda no tiene por qué quitarme la calma",
+      sub: "Abre tu expediente y Justino revisa tu situación y te muestra las opciones reales paso a paso.",
+      btn: "Abrir mi expediente",
+    },
+    Arrendamiento: {
+      title: "Tu casa merece claridad, no sorpresas",
+      sub: "Abre tu expediente y Justino organiza tu contrato, tus pruebas y qué hacer a continuación.",
+      btn: "Abrir mi expediente",
+    },
+    Civil: {
+      title: "Tu conflicto tiene un camino claro",
+      sub: "Abre tu expediente y Justino ordena tu caso y te dice el siguiente paso sin tecnicismos.",
+      btn: "Abrir mi expediente",
+    },
+    Administrativo: {
+      title: "El trámite no tiene por qué vencerte",
+      sub: "Abre tu expediente y Justino organiza tus plazos, documentos y tu siguiente movimiento.",
+      btn: "Abrir mi expediente",
+    },
+    Herencias: {
+      title: "Lo que dejaron merece resolverse en paz",
+      sub: "Abre tu expediente y Justino organiza la sucesión y los pasos que siguen, sin que empieces de cero.",
+      btn: "Abrir mi expediente",
+    },
+    Penal: {
+      title: "No tienes que enfrentarlo sin rumbo",
+      sub: "Abre tu expediente y Justino aclara tu situación y qué hacer a continuación, con lenguaje claro.",
+      btn: "Abrir mi expediente",
+    },
+    Inmobiliario: {
+      title: "Tu inmueble merece decisiones seguras",
+      sub: "Abre tu expediente y Justino organiza tu caso y te muestra el siguiente paso sin adivinar.",
+      btn: "Abrir mi expediente",
+    },
+    Bancos: {
+      title: "Tu dinero merece respuestas claras",
+      sub: "Abre tu expediente y Justino revisa el cargo o el trámite y te dice qué hacer a continuación.",
+      btn: "Abrir mi expediente",
+    },
+    Mercantil: {
+      title: "Tu negocio merece protección clara",
+      sub: "Abre tu expediente y Justino organiza tu caso y los siguientes pasos sin tecnicismos.",
+      btn: "Abrir mi expediente",
+    },
+    Fiscal: {
+      title: "El SAT no tiene por qué darte miedo",
+      sub: "Abre tu expediente y Justino aclara tu situación y qué hacer a continuación, paso a paso.",
+      btn: "Abrir mi expediente",
+    },
+  };
+  const cta = ctaByArea[row.area] || {
+    title: "No tienes que resolverlo solo",
+    sub: "Abre tu expediente y Justino organiza tu caso, te explica tus derechos y te guía paso a paso.",
+    btn: "Abrir mi expediente",
+  };
+
+  const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>`;
+
+  const ctaHtml = `
   <div class="jst-cta">
-    <p>No estás sola. Abre tu expediente en Justino.</p>
-    <a href="/">Abrir mi expediente</a>
+    <div class="jst-cta-icon">${icon}</div>
+    <h3>${escapeHtml(cta.title)}</h3>
+    <p>${escapeHtml(cta.sub)}</p>
+    <a href="/">${escapeHtml(cta.btn)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a>
   </div>`;
   return `<article class="jst-article">
 ${hero}
 <h1>${escapeHtml(row.h1 || row.title)}</h1>
 ${body}
-${cta}
+${ctaHtml}
 </article>`;
 }
 
