@@ -163,7 +163,7 @@ export function setupBlogRoutes(app: Express) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(html);
     } catch (e: any) {
-      res.status(500).send("Error al cargar el blog");
+      res.status(500).send("Error al cargar el blog: " + (e?.message || String(e)));
     }
   };
 
