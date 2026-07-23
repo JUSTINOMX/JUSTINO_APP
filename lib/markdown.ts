@@ -174,7 +174,7 @@ export function cleanBlogMarkdown(md: string): string {
     const t = l.trim();
     return (
       /^#\s/.test(t) || // H1 de ficha / metadata
-      /^##\s*(1\.|2\.|3\.|4\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) || // secciones meta/SEO
+      /^##\s*(1\.|2\.|3\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) || // secciones meta/SEO (4 es el H1 real, se maneja abajo)
       /CHECKLIST DE APROBACIÓN/.test(t) ||
       /^---+$/.test(t)
     );
@@ -187,28 +187,46 @@ export function cleanBlogMarkdown(md: string): string {
     return /palabras|objetivo|identificar|responde|redacta|incluye|evita|tono|estructura|ejemplo/i.test(t);
   };
 
+  // Rastrea si ya pasamos la metadata (secciones 1-4). El H1 real del
+  // artículo vive en "## 4. H1"; su contenido (el título) se descarta porque
+  // el blog ya lo renderiza desde row.h1. Tras ## 4, el gancho suelto y el
+  // resto del cuerpo (## 5 en adelante) se conservan.
+  let metaDone = false;
+  let dropNextPara = false;
+
   for (const line of lines) {
     const t = line.trim();
     if (isMetaHeader(line)) continue; // metadata: se omite siempre
     if (isCopyDirective(line)) continue; // instrucción de copy: se omite
 
-    // Inicio del contenido real: la primera sección numerada (SEJ) o la
-    // primera H2 sin numeración (A.D.C.A.R.). Antes de ahí, cualquier texto
-    // suelto (contenido de secciones 1-4: meta title, slug, h1 editorial)
-    // se descarta. Esto evita que el cuerpo arranque con basura.
+    // Sección numerada
     const secNum = /^##\s*(\d+)\.\s+(.*)$/.exec(t);
     if (secNum) {
       const n = parseInt(secNum[1], 10);
-      if (n >= 5) {
-        started = true;
-        out.push(`## ${secNum[2].trim()}`);
+      if (n <= 3) continue; // secciones 1-3: descartar todo
+      if (n === 4) {
+        // H1 real del artículo: descartar encabezado y su contenido (el
+        // título), pero ya pasamos la metadata para conservar el gancho.
+        metaDone = true;
+        dropNextPara = true;
+        continue;
       }
-      // secciones 1-4: se omite el encabezado y su contenido hasta la 5
+      // n >= 5: cuerpo real, normalizado sin número
+      metaDone = true;
+      out.push(`## ${secNum[2].trim()}`);
       continue;
     }
-    if (/^##\s/.test(t) || /^###\s/.test(t)) started = true;
 
-    if (started) out.push(line);
+    // Descartar el párrafo inmediato tras ## 4. H1 (el título duplicado)
+    if (dropNextPara) {
+      if (t === "") continue; // ignorar línea vacía de separación
+      dropNextPara = false;
+      continue;
+    }
+
+    // Una vez pasada la metadata (tras ## 4. H1), conservar TODO:
+    // el gancho suelto y el resto del cuerpo.
+    if (metaDone) out.push(line);
   }
 
   return out.join("\n").trim();
