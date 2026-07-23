@@ -161,14 +161,21 @@ export function renderMarkdown(md: string): string {
   return out.join("\n");
 }
 
-// Quita las secciones editoriales (meta/SEO/prompts/instrucciones/numeración SEJ-01)
+// Quita las secciones editoriales (meta/SEO/prompts/instrucciones/numeración SEJ-01/03)
 // que NO van en el blog.
 export function cleanBlogMarkdown(md: string): string {
   if (!md) return "";
 
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  let content = md.replace(/\r\n/g, "\n");
+
+  // Si existe una sección numerada >= 5 (ej. ## 5. INTRODUCCIÓN), cortar todo lo anterior
+  const sec5Match = /^##\s*([5-9]|\d{2,})\./m.exec(content);
+  if (sec5Match) {
+    content = content.slice(sec5Match.index);
+  }
+
+  const lines = content.split("\n");
   const cleanedLines: string[] = [];
-  let inMetaSection = false;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
@@ -178,29 +185,15 @@ export function cleanBlogMarkdown(md: string): string {
     if (/^#+\s*(FICHA|METADATA|DATOS EDITORIALES)/i.test(trimmed)) continue;
     if (/CHECKLIST DE APROBACIÓN/i.test(trimmed)) continue;
 
-    // Detectar inicio de secciones 1-4 (ej. ## 1. META TITLE, ## 2. META DESCRIPTION, ## 3. SLUG, ## 4. H1) o 16+
-    if (/^##\s*(1\.|2\.|3\.|4\.|16\.|17\.|18\.|19\.|20\.|21\.)/i.test(trimmed)) {
-      inMetaSection = true;
-      continue;
+    // Eliminar secciones 16+ (prompts u observaciones)
+    if (/^##\s*(1[6-9]|2[0-9])\./i.test(trimmed)) {
+      break;
     }
 
-    // Si encontramos una sección 5+ salir de meta section
-    if (/^##\s*([5-9]|1[0-5])\./i.test(trimmed)) {
-      inMetaSection = false;
-    }
-
-    if (inMetaSection) {
-      if (/^##\s*/.test(trimmed) && !/^##\s*(1\.|2\.|3\.|4\.|16\.|17\.|18\.|19\.|20\.|21\.)/i.test(trimmed)) {
-        inMetaSection = false;
-      } else {
-        continue;
-      }
-    }
-
-    // Eliminar la numeración SEJ-01 en títulos (ej. "## 5. INTRODUCCIÓN" -> "## INTRODUCCIÓN", "### 5.1 SUBTÍTULO" -> "### SUBTÍTULO")
+    // Eliminar la numeración SEJ-01/03 en títulos (ej. "## 5. INTRODUCCIÓN" -> "## INTRODUCCIÓN")
     line = line.replace(/^(#{1,6})\s*\d+(\.\d+)*\.\s*/, "$1 ");
 
-    // Eliminar instrucciones de copy entre paréntesis (ej. "(150-250 palabras...)", "(100–200 palabras)", etc.)
+    // Eliminar instrucciones de copy entre paréntesis (ej. "(80-150 palabras...)", "(150-250 palabras)", etc.)
     line = line.replace(/\(\d+[\s–\-]+\d+\s*palabras[^\)]*\)/gi, "");
     line = line.replace(/\(instrucciones[^\)]*\)/gi, "");
 
