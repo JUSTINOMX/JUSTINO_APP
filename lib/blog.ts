@@ -135,7 +135,7 @@ export function setupBlogRoutes(app: Express) {
       const supabase = sb();
       const { data, error } = await supabase
         .from("articles")
-        .select("slug,h1,meta_description,featured_image_url,area,published_at")
+        .select("*")
         .eq("estado", "publicado")
         .order("published_at", { ascending: false });
       if (error) throw error;
