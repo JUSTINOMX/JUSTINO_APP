@@ -130,7 +130,7 @@ function buildJsonLd(row: any): object[] {
 }
 
 export function setupBlogRoutes(app: Express) {
-  app.get(["/blog", "/blog/"], async (req, res) => {
+  const blogListHandler = async (req: any, res: any) => {
     try {
       const supabase = sb();
       const { data, error } = await supabase
@@ -165,7 +165,10 @@ export function setupBlogRoutes(app: Express) {
     } catch (e: any) {
       res.status(500).send("Error al cargar el blog");
     }
-  });
+  };
+
+  app.get("/blog", blogListHandler);
+  app.get("/blog/", blogListHandler);
 
   app.get("/blog/:slug", async (req, res) => {
     try {
