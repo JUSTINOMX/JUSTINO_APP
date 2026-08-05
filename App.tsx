@@ -118,11 +118,20 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (testUser?: User) => {
+    if (testUser && !user) {
+      setUser(testUser);
+    }
+    setShowLoginModal(false);
     setView('dashboard');
   };
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = async (testUser?: User) => {
+    if (testUser && !user) {
+      setUser(testUser);
+    } else if (!user) {
+      setUser({ id: '00000000-0000-0000-0000-000000000000', email: 'demo@justino.app' });
+    }
     setView('dashboard');
   };
 
@@ -171,9 +180,28 @@ function App() {
     }
   };
 
+  // Cargar vaultFiles iniciales desde localStorage si aplica
+  useEffect(() => {
+    try {
+      const savedLocalVault = localStorage.getItem('justino_local_vault');
+      if (savedLocalVault) {
+        const parsed = JSON.parse(savedLocalVault);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setVaultFiles(prev => {
+            const existingIds = new Set(prev.map(f => f.id));
+            const newItems = parsed.filter(item => !existingIds.has(item.id));
+            return [...prev, ...newItems];
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Error reading local vault storage", e);
+    }
+  }, []);
+
   const handleAddFile = async (name: string, type: string, content: string, origin: 'generated' | 'uploaded' = 'generated') => {
-    // 1. Optimistic Update
-    const tempId = Date.now().toString();
+    // 1. Optimistic & Local Storage Update
+    const tempId = 'vault-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const tempFile: VaultFile = {
       id: tempId,
       name,
@@ -182,15 +210,23 @@ function App() {
       content,
       origin
     };
-    setVaultFiles(prev => [tempFile, ...prev]);
 
-    // 2. Real Persistence
+    setVaultFiles(prev => {
+      const updated = [tempFile, ...prev];
+      try {
+        localStorage.setItem('justino_local_vault', JSON.stringify(updated.slice(0, 30)));
+      } catch (e) {}
+      return updated;
+    });
+
+    // 2. Cloud Persistence (si está configurado Supabase)
     if (user?.id) {
         try {
             const savedFile = await uploadToVault(user.id, name, type, content, origin);
             if (savedFile) {
-                // Replace temp with real data
-                setVaultFiles(prev => prev.map(f => f.id === tempId ? {
+                // Replace temp with real cloud data
+                setVaultFiles(prev => {
+                  const updated = prev.map(f => f.id === tempId ? {
                     id: savedFile.id,
                     name: savedFile.name,
                     type: savedFile.type,
@@ -198,12 +234,16 @@ function App() {
                     content: savedFile.content,
                     url: savedFile.url,
                     origin: savedFile.origin
-                } : f));
+                  } : f);
+                  try {
+                    localStorage.setItem('justino_local_vault', JSON.stringify(updated.slice(0, 30)));
+                  } catch (e) {}
+                  return updated;
+                });
             }
         } catch (error) {
-            console.error("Failed to save file to Vault:", error);
-            // Revert optimistic update
-            setVaultFiles(prev => prev.filter(f => f.id !== tempId));
+            console.warn("Conservando archivo en Bóveda local debido a límite/ausencia de nube:", error);
+            // MANTENER tempFile en local state para que NUNCA desaparezca de la Bóveda del usuario
         }
     }
   };
@@ -222,7 +262,7 @@ function App() {
       )}
 
       {showLoginModal && (
-        <LoginModal onSuccess={() => setShowLoginModal(false)} onClose={cancelLogin} />
+        <LoginModal onSuccess={handleLoginSuccess} onClose={cancelLogin} />
       )}
 
       {view === 'onboarding' && (

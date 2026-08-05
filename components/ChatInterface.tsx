@@ -12,11 +12,11 @@ interface ChatInterfaceProps {
 }
 
 const STRATEGIC_STEPS = [
-  "Iniciando Protocolo Specter...",
+  "Iniciando Análisis Estratégico...",
   "Analizando debilidades de la contraparte...",
-  "Fundamentando con Código Civil Federal...",
+  "Fundamentando con legislación mexicana vigentes...",
   "Buscando jurisprudencia ganadora...",
-  "Diseñando jugada de jaque mate...",
+  "Diseñando la mejor jugada legal...",
   "Blindando tu declaración..."
 ];
 
@@ -102,29 +102,81 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
       const response = await sendMessageToJustino(currentInput, messages, currentAttachment || undefined);
       
       // Parse for generated documents wrapped in [DOCUMENTO_OFICIAL: ... ]
-      const docRegex = /\[DOCUMENTO_OFICIAL:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\]/gs;
-      const docMatches = [...response.text.matchAll(docRegex)];
+      const docTagRegex = /\[DOCUMENTO_OFICIAL:\s*([\s\S]+?)\]/gi;
+      let docMatches = [...response.text.matchAll(docTagRegex)];
       
       let finalBotText = response.text;
       
       if (docMatches.length > 0) {
         docMatches.forEach(match => {
-          const [fullMatch, title, content, location] = match;
-          // Extract data
+          const [fullMatch, inside] = match;
+          const parts = inside.split('|');
+          let title = "Documento Legal";
+          let content = "";
+          let location = "Juzgado de lo Familiar o Dependencia Competente de tu ciudad";
+
+          if (parts.length >= 3) {
+            title = parts[0].trim();
+            location = parts[parts.length - 1].trim();
+            content = parts.slice(1, -1).join('|').trim();
+          } else if (parts.length === 2) {
+            title = parts[0].trim();
+            content = parts[1].trim();
+          } else {
+            content = inside.trim();
+          }
+
+          content = content.replace(/^\d+:\s*/gm, '').trim();
+
           onAddFile(
-            title.trim(), 
+            title, 
             "Solicitud Legal", 
-            `${content.trim()}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location.trim()}\n(Presentar en original y 2 copias con identificación oficial)`,
+            `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
             'generated'
           );
-          // Remove the technical block from the visible message
+
           finalBotText = finalBotText.replace(fullMatch, "");
         });
         
-        // Clean up text
         finalBotText = finalBotText.trim();
         if (!finalBotText) {
-          finalBotText = "He generado tu documento oficial. Ya lo puedes encontrar en tu Bóveda listo para descargar e imprimir.";
+          finalBotText = "Tu documento oficial está listo y guardado en tu Bóveda Digital para que lo puedas revisar, descargar e imprimir cuando desees.";
+        }
+      } else if (response.text.includes("[DOCUMENTO_OFICIAL:")) {
+        // Fallback parser in case closing bracket ']' was omitted or cut off by the AI model
+        const startIndex = response.text.indexOf("[DOCUMENTO_OFICIAL:");
+        const rawTag = response.text.substring(startIndex);
+        const inside = rawTag.replace(/^\[DOCUMENTO_OFICIAL:\s*/i, '').replace(/\]\s*$/, '').trim();
+        const parts = inside.split('|');
+        let title = "Documento Legal";
+        let content = "";
+        let location = "Juzgado de lo Familiar o Dependencia Competente de tu ciudad";
+        
+        if (parts.length >= 3) {
+          title = parts[0].trim();
+          location = parts[parts.length - 1].trim();
+          content = parts.slice(1, -1).join('|').trim();
+        } else if (parts.length === 2) {
+          title = parts[0].trim();
+          content = parts[1].trim();
+        } else {
+          content = inside;
+        }
+
+        content = content.replace(/^\d+:\s*/gm, '').trim();
+
+        if (content.length > 10) {
+          onAddFile(
+            title,
+            "Solicitud Legal",
+            `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
+            'generated'
+          );
+
+          finalBotText = response.text.substring(0, startIndex).trim();
+          if (!finalBotText) {
+            finalBotText = "Tu documento oficial está listo y guardado en tu Bóveda Digital para que lo puedas revisar, descargar e imprimir cuando desees.";
+          }
         }
       }
 

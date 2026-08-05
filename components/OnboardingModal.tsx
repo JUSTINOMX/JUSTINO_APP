@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
-import { X, Check, ExternalLink, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard } from 'lucide-react';
+import { X, Check, ExternalLink, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, Zap } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
 import { config } from '../config';
 import { supabase } from '../services/supabaseClient';
 
 interface OnboardingModalProps {
-  onComplete: (user: User) => void;
+  onComplete: (user?: User) => void;
   onClose: () => void;
   initialStep?: number;
 }
@@ -202,10 +202,36 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                 </div>
               </div>
               
-              <div className="pt-4 border-t border-slate-100 text-center">
+              <div className="pt-4 border-t border-slate-100 text-center space-y-3">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                   Pago Protegido por Stripe 
                 </p>
+
+                {/* Banner Modo Prueba / Preview */}
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-2.5">
+                  <p className="text-xs font-black text-emerald-800 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                    <Zap className="w-4 h-4 text-emerald-600" /> Modo Prueba / Preview Activo
+                  </p>
+                  <p className="text-xs text-emerald-700 leading-relaxed font-medium">
+                    Pasarela en pausa temporal para pruebas. Accede directamente al expediente de Justino:
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button 
+                      type="button"
+                      onClick={() => setStep(3)} 
+                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow transition-all"
+                    >
+                      Crear Cuenta (Sin Pago)
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => onComplete({ id: 'demo-user-preview', email: emailForPayment || 'demo@justino.app' })} 
+                      className="flex-1 py-2.5 bg-navy-900 hover:bg-navy-800 text-white rounded-xl font-bold text-xs shadow transition-all"
+                    >
+                      Entrar Directo como Demo
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -2,7 +2,7 @@
 // Added React to imports to fix missing namespace error
 import React, { useState } from 'react';
 // Consistently importing ShieldCheck at the top with other lucide-react icons
-import { X, Lock, Eye, EyeOff, AlertCircle, ArrowRight, User as UserIcon, Loader2, ShieldCheck } from 'lucide-react';
+import { X, Lock, Eye, EyeOff, AlertCircle, ArrowRight, User as UserIcon, Loader2, ShieldCheck, Zap } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -144,7 +144,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center space-y-4">
+             <button
+               type="button"
+               onClick={() => onSuccess({ id: 'demo-user-preview', email: 'demo@justino.app' })}
+               className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+             >
+               <Zap className="w-4 h-4 text-emerald-600" />
+               Entrar en Modo Prueba / Preview
+             </button>
+
              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
                 <ShieldCheck className="w-3 h-3 text-emerald-500" /> Encriptación AES-256
              </div>
