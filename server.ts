@@ -242,10 +242,17 @@ const debugLog = (msg: string) => {
   app.post("/api/v1/stripe/create-checkout", authMiddleware, paymentLimiter, async (req, res) => {
     try {
       const { email } = req.body;
-      if (!email) return res.status(400).json({ error: "Email is required" });
+      if (!email) return res.status(400).json({ error: "El correo electrónico es requerido." });
+
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey || stripeKey.trim() === "" || stripeKey.includes("sk_test_...")) {
+        return res.status(400).json({ 
+          error: "La clave secreta de Stripe (STRIPE_SECRET_KEY) no está configurada en las variables de entorno del servidor. Por favor configúrala en el panel de configuración." 
+        });
+      }
 
       const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+      const stripe = new Stripe(stripeKey);
       
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -264,7 +271,6 @@ const debugLog = (msg: string) => {
           },
         ],
         mode: "payment",
-        // No more ?success=true! We use a clean URL.
         success_url: `${req.headers.origin}/?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${req.headers.origin}/`,
         metadata: {
@@ -275,7 +281,7 @@ const debugLog = (msg: string) => {
       res.json({ url: session.url });
     } catch (error: any) {
       console.error("Stripe Checkout Error:", error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || "Error al conectar con Stripe." });
     }
   });
 

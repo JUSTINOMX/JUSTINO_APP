@@ -11,13 +11,20 @@ import { supabase } from './services/supabaseClient';
 import { config } from './config';
 import { uploadToVault } from './services/justino-service';
 
+const INITIAL_WELCOME_MESSAGE: Message = {
+  id: 'welcome',
+  text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+  sender: 'bot',
+  timestamp: new Date(),
+};
+
 function App() {
   const [view, setView] = useState<AppView>('landing');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   
   const [user, setUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME_MESSAGE]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
 
   useEffect(() => {
@@ -67,15 +74,18 @@ function App() {
                     .order('timestamp', { ascending: true });
                 
                 if (msgs && !msgError) {
-                    const formattedMessages: Message[] = msgs.map(m => ({
-                        id: m.id,
-                        text: m.text,
-                        sender: m.sender,
-                        timestamp: new Date(m.timestamp),
-                        attachment: m.attachment || undefined
-                    }));
-                    
-                    setMessages(formattedMessages);
+                    if (msgs.length === 0) {
+                        setMessages([INITIAL_WELCOME_MESSAGE]);
+                    } else {
+                        const formattedMessages: Message[] = msgs.map(m => ({
+                            id: m.id,
+                            text: m.text,
+                            sender: m.sender,
+                            timestamp: new Date(m.timestamp),
+                            attachment: m.attachment || undefined
+                        }));
+                        setMessages(formattedMessages);
+                    }
                 }
 
                 const { data: files, error: fileError } = await supabase
@@ -141,7 +151,7 @@ function App() {
       await supabase.auth.signOut();
     }
     setUser(null);
-    setMessages([]);
+    setMessages([INITIAL_WELCOME_MESSAGE]);
     setVaultFiles([]);
     setView('landing');
   };

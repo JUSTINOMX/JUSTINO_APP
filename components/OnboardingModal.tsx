@@ -34,6 +34,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       return;
     }
     setIsLoading(true);
+    setRegisterError('');
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (supabase) {
@@ -48,11 +49,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
         headers,
         body: JSON.stringify({ email: emailForPayment })
       });
-      const { url, error } = await response.json();
-      if (url) {
-        window.location.href = url;
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON API Response:", text);
+        throw new Error("La pasarela de Stripe no está lista en el servidor o requiere la variable STRIPE_SECRET_KEY. Puedes usar los botones sin pago abajo para probar la creación de cuenta.");
+      }
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Error al procesar la solicitud de pago.");
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
       } else {
-        throw new Error(error || "No checkout URL returned");
+        throw new Error(data.error || "No se obtuvo la URL de redirección a Stripe.");
       }
     } catch (err: any) {
       console.error(err);

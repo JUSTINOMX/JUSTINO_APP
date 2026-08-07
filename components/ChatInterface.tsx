@@ -29,22 +29,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const welcomeDispatchedRef = useRef(false);
-
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const hasWelcome = messages.some(m => m.id === 'welcome');
-      if (messages.length === 0 && !hasWelcome && !welcomeDispatchedRef.current) {
-        welcomeDispatchedRef.current = true;
-        onNewMessage({
-          id: 'welcome',
-          text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
-          sender: 'bot',
-          timestamp: new Date(),
-        });
-      }
-    }, 500);
-    return () => clearTimeout(timer);
+    if (messages.length === 0) {
+      onNewMessage({
+        id: 'welcome',
+        text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+        sender: 'bot',
+        timestamp: new Date(),
+      });
+    }
   }, [messages, onNewMessage]);
 
   useEffect(() => {
