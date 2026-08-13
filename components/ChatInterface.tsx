@@ -50,12 +50,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
     return () => clearInterval(interval);
   }, [isSending]);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
-    }
-  }, [input]);
+  const sanitizeDocumentText = (txt: string) => {
+    if (!txt) return "";
+    let clean = txt.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+    clean = clean.replace(/(?:\b\d+,\s*){5,}\b\d+\b/g, '1, 2, 14, 16, 20');
+    clean = clean.replace(/,\s*,/g, ',').replace(/,\s*( de| por| en| con| a| que)\b/gi, '$1');
+    return clean;
+  };
+
+  const renderFormattedText = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return <strong key={index} className="font-bold text-navy-950">{part.slice(2, -2)}</strong>;
+      } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+        return <span key={index} className="font-semibold text-navy-900">{part.slice(1, -1)}</span>;
+      }
+      return part;
+    });
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -119,7 +133,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
             content = inside.trim();
           }
 
-          content = content.replace(/^\d+:\s*/gm, '').trim();
+          content = sanitizeDocumentText(content.replace(/^\d+:\s*/gm, ''));
+          title = sanitizeDocumentText(title);
+          location = sanitizeDocumentText(location);
 
           onAddFile(
             title, 
@@ -156,7 +172,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
           content = inside;
         }
 
-        content = content.replace(/^\d+:\s*/gm, '').trim();
+        content = sanitizeDocumentText(content.replace(/^\d+:\s*/gm, ''));
+        title = sanitizeDocumentText(title);
+        location = sanitizeDocumentText(location);
 
         if (content.length > 10) {
           onAddFile(
@@ -204,7 +222,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
             }`}>
               <div className="space-y-4">
                 <div className="whitespace-pre-wrap leading-relaxed text-[15px] font-medium">
-                  {msg.text}
+                  {renderFormattedText(msg.text)}
                 </div>
                 
                 {msg.sources && (

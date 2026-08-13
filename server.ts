@@ -257,14 +257,12 @@ const debugLog = (msg: string) => {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: email,
+        allow_promotion_codes: true,
         line_items: [
           {
             price_data: {
               currency: "mxn",
-              product_data: {
-                name: "Justino - Expediente Digital Pro",
-                description: "Acceso vitalicio a asesoría legal y generación de documentos para tu caso.",
-              },
+              product: "prod_Tc8CPnxlKG0Yrm",
               unit_amount: 40000, // $400.00 MXN
             },
             quantity: 1,
