@@ -254,6 +254,10 @@ const debugLog = (msg: string) => {
       const Stripe = (await import("stripe")).default;
       const stripe = new Stripe(stripeKey);
       
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
+      const proto = req.headers["x-forwarded-proto"] || "https";
+      const origin = req.headers.origin || `${proto}://${host}`;
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         customer_email: email,
@@ -269,8 +273,8 @@ const debugLog = (msg: string) => {
           },
         ],
         mode: "payment",
-        success_url: `${req.headers.origin}/?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req.headers.origin}/`,
+        success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${origin}/`,
         metadata: {
           email: email
         }

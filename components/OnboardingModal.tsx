@@ -13,13 +13,17 @@ interface OnboardingModalProps {
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, onClose, initialStep = 1 }) => {
-  const [step, setStep] = useState(initialStep);
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const sessionId = urlParams?.get('session_id');
+  const savedPaymentEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
+
+  const [step, setStep] = useState(sessionId ? 3 : initialStep);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   
-  const [email, setEmail] = useState('');
-  const [emailForPayment, setEmailForPayment] = useState('');
+  const [email, setEmail] = useState(savedPaymentEmail);
+  const [emailForPayment, setEmailForPayment] = useState(savedPaymentEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [registerError, setRegisterError] = useState('');
@@ -33,6 +37,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       setRegisterError("Por favor ingresa tu correo para el recibo.");
       return;
     }
+    
+    // Save email in session storage so it persists when returning from Stripe
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('justino_payment_email', emailForPayment);
+    }
+
     setIsLoading(true);
     setRegisterError('');
     try {
@@ -76,41 +86,88 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
 
   // Check for successful payment return
   React.useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session_id');
-    if (sessionId && step === 2) {
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get('session_id');
+    if (sid) {
       setStep(3);
-      // Opcional: Podríamos verificar el sessionId aquí llamando a un API
+      const storedEmail = sessionStorage.getItem('justino_payment_email');
+      if (storedEmail) {
+        setEmail(storedEmail);
+      }
     }
-  }, [step]);
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
-
     setRegisterError('');
-    if (email && password) {
-      setIsRegistering(true);
-      try {
+
+    const targetEmail = email.trim();
+    const targetPassword = password.trim();
+
+    if (!targetEmail || !targetPassword) {
+      setRegisterError('Por favor introduce tu correo y clave.');
+      return;
+    }
+
+    setIsRegistering(true);
+    try {
+      if (supabase) {
         const { data, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
+          email: targetEmail,
+          password: targetPassword,
         });
 
         if (authError) {
+          // If already registered in Supabase, sign in automatically
+          if (authError.message?.toLowerCase().includes('already') || authError.message?.toLowerCase().includes('registered')) {
+            const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+              email: targetEmail,
+              password: targetPassword
+            });
+
+            if (loginErr) {
+              setRegisterError("Este correo ya está registrado con otra clave. Introduce tu clave correcta o usa otro correo.");
+              setIsRegistering(false);
+              return;
+            }
+
+            if (loginData.user) {
+              if (typeof window !== 'undefined' && window.location.search) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+              onComplete({ id: loginData.user.id, email: loginData.user.email || targetEmail });
+              return;
+            }
+          }
+
           setRegisterError(authError.message);
           setIsRegistering(false);
           return;
         }
 
         if (data.user) {
-          onComplete(); // App.tsx will handle the state via onAuthStateChange
+          if (typeof window !== 'undefined' && window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          onComplete({ id: data.user.id, email: data.user.email || targetEmail });
+          return;
         }
-      } catch (err: any) {
-        setRegisterError("Error al crear la cuenta. Intenta de nuevo.");
-      } finally {
-        setIsRegistering(false);
       }
+
+      // Fallback/direct mode (when Supabase is not connected or in local preview mode)
+      const localUser: User = {
+        id: 'user-' + Date.now(),
+        email: targetEmail
+      };
+      if (typeof window !== 'undefined' && window.location.search) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      onComplete(localUser);
+    } catch (err: any) {
+      console.error(err);
+      setRegisterError("Error al crear la cuenta. Intenta de nuevo.");
+    } finally {
+      setIsRegistering(false);
     }
   };
 

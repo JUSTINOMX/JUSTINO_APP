@@ -19,13 +19,24 @@ const INITIAL_WELCOME_MESSAGE: Message = {
 };
 
 function App() {
-  const [view, setView] = useState<AppView>('landing');
+  const hasSessionId = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('session_id') || window.location.search.includes('session_id='));
+  const [view, setView] = useState<AppView>(hasSessionId ? 'onboarding' : 'landing');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingStep, setOnboardingStep] = useState(hasSessionId ? 3 : 1);
   
   const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME_MESSAGE]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
+
+  // Detect session_id in URL upon mount or state changes
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    if (sessionId && !user) {
+      setView('onboarding');
+      setOnboardingStep(3);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -137,11 +148,17 @@ function App() {
   };
 
   const completeOnboarding = async (testUser?: User) => {
-    if (testUser && !user) {
+    if (testUser) {
       setUser(testUser);
     } else if (!user) {
-      setUser({ id: '00000000-0000-0000-0000-000000000000', email: 'demo@justino.app' });
+      setUser({ id: 'user-' + Date.now(), email: 'cliente@justino.app' });
     }
+    
+    // Clear URL query parameters cleanly
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     setView('dashboard');
   };
 
