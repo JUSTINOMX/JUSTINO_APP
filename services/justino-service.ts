@@ -1,6 +1,46 @@
-
 import { Message, CaseSummary, Attachment, GroundingSource } from "../types";
 import { supabase } from "./supabaseClient";
+
+// 1) Interfaces de Dominio Empresarial para Casos y Bóveda
+export interface LegalCase {
+  id?: string;
+  user_id?: string;
+  title: string;
+  case_type?: string;
+  status?: string;
+  state_jurisdiction?: string;
+  city_jurisdiction?: string;
+  victim_name?: string;
+  aggressor_name?: string;
+  economic_claim_amount?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CaseMessage {
+  id?: string;
+  case_id?: string;
+  user_id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: GroundingSource[] | string[];
+  created_at?: string;
+}
+
+export interface CaseVaultDocument {
+  id?: string;
+  case_id?: string;
+  user_id?: string;
+  title: string;
+  legal_content?: string;
+  physical_address?: string;
+  requirements?: string[];
+  type?: string;
+  url?: string;
+  path?: string;
+  origin?: 'generated' | 'uploaded';
+  created_at?: string;
+}
 
 // Helper to get auth header
 const getAuthHeaders = async () => {
@@ -10,17 +50,152 @@ const getAuthHeaders = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
-        return headers;
       }
     } catch (e) {
       console.warn("Could not retrieve Supabase session token:", e);
     }
   }
-  headers["Authorization"] = `Bearer demo-token-preview`;
   return headers;
 };
 
-// Instrucción maestra para el SaaS Legal - Optimizada para confianza, fluidez y rigor legal
+// 2) Funciones de Servicio de Casos y Bóveda (Supabase)
+
+export const listCases = async (userId: string): Promise<LegalCase[]> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('legal_cases')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const createCase = async (userId: string, caseData: Partial<LegalCase>): Promise<LegalCase> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('legal_cases')
+    .insert([{
+      ...caseData,
+      user_id: userId,
+      updated_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const addCaseMessage = async (caseId: string, userId: string, message: CaseMessage): Promise<CaseMessage> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('case_messages')
+    .insert([{
+      case_id: caseId,
+      user_id: userId,
+      role: message.role,
+      content: message.content,
+      sources: message.sources || []
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const saveVaultDocument = async (caseId: string, userId: string, doc: CaseVaultDocument): Promise<CaseVaultDocument> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('case_vault_documents')
+    .insert([{
+      case_id: caseId,
+      user_id: userId,
+      title: doc.title,
+      legal_content: doc.legal_content || '',
+      physical_address: doc.physical_address || '',
+      requirements: doc.requirements || [],
+      type: doc.type || 'application/pdf',
+      url: doc.url || null,
+      path: doc.path || null,
+      origin: doc.origin || 'generated'
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+// 3) Subida a Storage y persistencia en case_vault_documents
+export const uploadToVault = async (
+  userId: string,
+  name: string,
+  type: string,
+  content: string,
+  origin: 'generated' | 'uploaded' = 'generated',
+  caseId?: string
+) => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+
+  const filename = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
+  const path = `${userId}/${filename}`;
+
+  let publicUrl = "";
+
+  try {
+    let fileBody: any;
+    if (content.startsWith('data:')) {
+      const response = await fetch(content);
+      fileBody = await response.blob();
+    } else {
+      fileBody = content;
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from('vault')
+      .upload(path, fileBody, {
+        contentType: type,
+        upsert: true
+      });
+
+    if (!uploadError) {
+      const { data: { publicUrl: url } } = supabase.storage
+        .from('vault')
+        .getPublicUrl(path);
+      publicUrl = url;
+    }
+  } catch (storageErr) {
+    console.warn("Storage upload omitido o no disponible:", storageErr);
+  }
+
+  const effectiveCaseId = caseId || userId;
+
+  const { data, error: dbError } = await supabase
+    .from('case_vault_documents')
+    .insert([{
+      case_id: effectiveCaseId,
+      user_id: userId,
+      title: name,
+      legal_content: origin === 'generated' ? content : '',
+      physical_address: '',
+      requirements: [],
+      type,
+      path: path || null,
+      url: publicUrl || null,
+      origin
+    }])
+    .select()
+    .single();
+
+  if (dbError) throw dbError;
+
+  return data;
+};
+
+// 4) Instrucción Maestra del Prompt de Justino
 const SYSTEM_INSTRUCTION = `
 ERES "JUSTINO", EL GUIADOR Y ASISTENTE LEGAL DIGITAL LÍDER EN MÉXICO.
 TU MISIÓN: Resolver la situación legal del usuario de principio a fin, trazando una estrategia legal clara, redactando sus documentos jurídicos completos y diciéndole exactamente a dónde y cómo entregarlos, eliminando por completo la necesidad de abogados o intermediarios costosos.
@@ -88,9 +263,9 @@ ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
    - En su lugar, usa un lenguaje enfocado en el proceso y la estrategia: "trazar tu ruta legal", "dar un paso firme y formal", "hacer valer los derechos que la ley otorga a tus hijos", "avanzar con total claridad".
 
 10. PROHIBICIÓN CRÍTICA DE DERIVACIÓN A ABOGADOS EXTERNOS:
-   - TIENES ESTRICTAMENTE PROHIBIDO sugerir, recomendar o insinuar que el usuario busque, contrate o acuda con un abogado humano, despacho particular o defensoría legal externa.
-   - Los usuarios acuden a Justino para EVITAR a los abogados por desconfianza y altos costos.
-   - TÚ eres su guía legal completo. Tú redactas sus escritos y le das las instrucciones exactas para que el usuario o usuaria realice sus trámites directamente por su propia cuenta ("pro se") de manera segura, rápida y formal.
+    - TIENES ESTRICTAMENTE PROHIBIDO sugerir, recomendar o insinuar que el usuario busque, contrate o acuda con un abogado humano, despacho particular o defensoría legal externa.
+    - Los usuarios acuden a Justino para EVITAR a los abogados por desconfianza y altos costos.
+    - TÚ eres su guía legal completo. Tú redactas sus escritos y le das las instrucciones exactas para que el usuario o usuaria realice sus trámites directamente por su propia cuenta ("pro se") de manera segura, rápida y formal.
 `;
 
 export const sendMessageToJustino = async (
@@ -180,66 +355,4 @@ export const generateCaseSummary = async (messages: Message[]): Promise<CaseSumm
     console.error("Summary error:", e);
     return { antecedents: [], recommendedActions: [], lastUpdated: new Date() };
   }
-};
-
-export const uploadToVault = async (
-  userId: string,
-  name: string,
-  type: string,
-  content: string,
-  origin: 'generated' | 'uploaded' = 'generated'
-) => {
-  if (!supabase) throw new Error("Supabase client not initialized");
-
-  // 1. Prepare filename and path
-  const filename = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
-  const path = `${userId}/${filename}`;
-
-  let publicUrl = "";
-
-  // 2. Upload to Storage (Opcional si el bucket 'vault' existe)
-  try {
-    let fileBody: any;
-    if (content.startsWith('data:')) {
-      const response = await fetch(content);
-      fileBody = await response.blob();
-    } else {
-      fileBody = content;
-    }
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('vault')
-      .upload(path, fileBody, {
-        contentType: type,
-        upsert: true
-      });
-
-    if (!uploadError) {
-      const { data: { publicUrl: url } } = supabase.storage
-        .from('vault')
-        .getPublicUrl(path);
-      publicUrl = url;
-    }
-  } catch (storageErr) {
-    console.warn("Storage upload omitido o no disponible:", storageErr);
-  }
-
-  // 3. Save metadata & content to PostgreSQL ('documents' table)
-  const { data, error: dbError } = await supabase
-    .from('documents')
-    .insert([{
-      name,
-      type,
-      path: path || null,
-      url: publicUrl || null,
-      origin,
-      case_id: userId,
-      content: origin === 'generated' ? content : null
-    }])
-    .select()
-    .single();
-
-  if (dbError) throw dbError;
-
-  return data;
 };
