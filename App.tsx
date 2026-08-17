@@ -19,10 +19,12 @@ const INITIAL_WELCOME_MESSAGE: Message = {
 };
 
 function App() {
-  const hasSessionId = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('session_id') || window.location.search.includes('session_id='));
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const hasSessionId = Boolean(urlParams?.get('session_id'));
+
   const [view, setView] = useState<AppView>(hasSessionId ? 'onboarding' : 'landing');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(hasSessionId ? 3 : 1);
+  const [onboardingStep, setOnboardingStep] = useState<number>(hasSessionId ? 2 : 1);
   
   const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME_MESSAGE]);
@@ -30,11 +32,11 @@ function App() {
 
   // Detect session_id in URL upon mount or state changes
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session_id');
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
     if (sessionId && !user) {
       setView('onboarding');
-      setOnboardingStep(3);
+      setOnboardingStep(2);
     }
   }, [user]);
 

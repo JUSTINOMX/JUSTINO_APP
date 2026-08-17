@@ -1,9 +1,7 @@
-
-import React, { useState } from 'react';
-import { X, Check, ExternalLink, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, ShieldCheck } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
-import { config } from '../config';
 import { supabase } from '../services/supabaseClient';
 
 interface OnboardingModalProps {
@@ -13,38 +11,56 @@ interface OnboardingModalProps {
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, onClose, initialStep = 1 }) => {
+  // Check URL parameters for active session_id from Stripe
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const sessionId = urlParams?.get('session_id');
   const savedPaymentEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
 
-  const [step, setStep] = useState(sessionId ? 3 : initialStep);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // If returning from Stripe with a session_id, go to Step 2 (Register in Supabase); otherwise Step 1 (Payment with Stripe)
+  const [step, setStep] = useState<number>(sessionId ? 2 : (initialStep === 3 ? 2 : 1));
+  const [acceptedTerms, setAcceptedTerms] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   
-  const [email, setEmail] = useState(savedPaymentEmail);
   const [emailForPayment, setEmailForPayment] = useState(savedPaymentEmail);
+  const [email, setEmail] = useState(savedPaymentEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [registerError, setRegisterError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleNext = () => {
-    if (step === 1 && acceptedTerms) setStep(2);
-  };
+  // Sync state if session_id is detected
+  useEffect(() => {
+    if (sessionId) {
+      setStep(2);
+      const stored = sessionStorage.getItem('justino_payment_email');
+      if (stored) {
+        setEmail(stored);
+      }
+    }
+  }, [sessionId]);
 
-  const handlePay = async () => {
-    if (!emailForPayment) {
-      setRegisterError("Por favor ingresa tu correo para el recibo.");
+  // Handle Redirection to Stripe Checkout
+  const handleProceedToStripe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    const targetEmail = emailForPayment.trim();
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setErrorMessage("Por favor ingresa un correo electrónico válido para tu recibo y expediente.");
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setErrorMessage("Debes aceptar los términos y responsabilidades legales para continuar.");
       return;
     }
     
     // Save email in session storage so it persists when returning from Stripe
     if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('justino_payment_email', emailForPayment);
+      sessionStorage.setItem('justino_payment_email', targetEmail);
     }
 
     setIsLoading(true);
-    setRegisterError('');
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (supabase) {
@@ -57,14 +73,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       const response = await fetch("/api/v1/stripe/create-checkout", {
         method: "POST",
         headers,
-        body: JSON.stringify({ email: emailForPayment })
+        body: JSON.stringify({ email: targetEmail })
       });
 
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
-        console.error("Non-JSON API Response:", text);
-        throw new Error("La pasarela de Stripe no está lista en el servidor o requiere la variable STRIPE_SECRET_KEY. Puedes usar los botones sin pago abajo para probar la creación de cuenta.");
+        console.error("Non-JSON API Response from Stripe:", text);
+        throw new Error("No se pudo conectar con el servicio de pagos. Verifica la configuración de Stripe.");
       }
 
       const data = await response.json();
@@ -73,52 +89,47 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       }
 
       if (data.url) {
+        // Redirect directly to Stripe hosted checkout page
         window.location.href = data.url;
       } else {
-        throw new Error(data.error || "No se obtuvo la URL de redirección a Stripe.");
+        throw new Error("No se recibió el enlace de pago de Stripe.");
       }
     } catch (err: any) {
       console.error(err);
-      setRegisterError(err.message || "Error al iniciar pago. Intenta de nuevo.");
+      setErrorMessage(err.message || "Error al iniciar el pago con Stripe. Intenta de nuevo.");
       setIsLoading(false);
     }
   };
 
-  // Check for successful payment return
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sid = params.get('session_id');
-    if (sid) {
-      setStep(3);
-      const storedEmail = sessionStorage.getItem('justino_payment_email');
-      if (storedEmail) {
-        setEmail(storedEmail);
-      }
-    }
-  }, []);
-
-  const handleRegister = async (e: React.FormEvent) => {
+  // Handle Supabase Registration after returning from Stripe
+  const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setRegisterError('');
+    setErrorMessage('');
 
     const targetEmail = email.trim();
     const targetPassword = password.trim();
 
-    if (!targetEmail || !targetPassword) {
-      setRegisterError('Por favor introduce tu correo y clave.');
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setErrorMessage('Por favor introduce un correo electrónico válido.');
+      return;
+    }
+
+    if (!targetPassword || targetPassword.length < 6) {
+      setErrorMessage('La contraseña debe contener al menos 6 caracteres.');
       return;
     }
 
     setIsRegistering(true);
     try {
       if (supabase) {
-        const { data, error: authError } = await supabase.auth.signUp({
+        // 1. Attempt to create the user account in Supabase
+        const { data: signUpData, error: authError } = await supabase.auth.signUp({
           email: targetEmail,
           password: targetPassword,
         });
 
         if (authError) {
-          // If already registered in Supabase, sign in automatically
+          // If already registered, attempt to log in
           if (authError.message?.toLowerCase().includes('already') || authError.message?.toLowerCase().includes('registered')) {
             const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
               email: targetEmail,
@@ -126,12 +137,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             });
 
             if (loginErr) {
-              setRegisterError("Este correo ya está registrado con otra clave. Introduce tu clave correcta o usa otro correo.");
+              setErrorMessage("Este correo ya tiene una cuenta registrada. Introduce tu contraseña correcta o contacta soporte.");
               setIsRegistering(false);
               return;
             }
 
             if (loginData.user) {
+              // Clean URL from session_id
               if (typeof window !== 'undefined' && window.location.search) {
                 window.history.replaceState({}, document.title, window.location.pathname);
               }
@@ -140,21 +152,22 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             }
           }
 
-          setRegisterError(authError.message);
+          setErrorMessage(authError.message);
           setIsRegistering(false);
           return;
         }
 
-        if (data.user) {
+        if (signUpData.user) {
+          // Clean URL from session_id
           if (typeof window !== 'undefined' && window.location.search) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
-          onComplete({ id: data.user.id, email: data.user.email || targetEmail });
+          onComplete({ id: signUpData.user.id, email: signUpData.user.email || targetEmail });
           return;
         }
       }
 
-      // Fallback/direct mode (when Supabase is not connected or in local preview mode)
+      // Fallback for environment without live Supabase
       const localUser: User = {
         id: 'user-' + Date.now(),
         email: targetEmail
@@ -164,68 +177,55 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       }
       onComplete(localUser);
     } catch (err: any) {
-      console.error(err);
-      setRegisterError("Error al crear la cuenta. Intenta de nuevo.");
+      console.error("Auth Exception:", err);
+      setErrorMessage("Error al registrar la cuenta en Supabase. Intenta de nuevo.");
     } finally {
       setIsRegistering(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/95 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/90 backdrop-blur-md">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden relative animate-fade-in-up border border-white/10">
+        
+        {/* Modal Header */}
         <div className="bg-navy-900 p-6 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
             <Logo className="w-6 h-6 text-emerald-500" />
-            <span className="font-bold tracking-tight">Protocolo Justino</span>
+            <span className="font-bold tracking-tight">Justino • Asistencia Legal</span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button 
+            onClick={onClose} 
+            className="text-slate-400 hover:text-white transition-colors"
+            title="Cerrar"
+          >
             <X className="w-6 h-6" />
           </button>
         </div>
 
+        {/* Step Progress Bar */}
         <div className="h-1.5 w-full bg-slate-100">
-          <div className="h-full bg-emerald-500 transition-all duration-700 ease-in-out" style={{ width: `${(step / 3) * 100}%` }} />
+          <div 
+            className="h-full bg-emerald-500 transition-all duration-700 ease-in-out" 
+            style={{ width: step === 1 ? '50%' : '100%' }} 
+          />
         </div>
 
         <div className="p-8">
+          
+          {/* STEP 1: PAYMENT WITH STRIPE */}
           {step === 1 && (
-            <div className="space-y-6">
+            <form onSubmit={handleProceedToStripe} className="space-y-6">
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-navy-900">Validación Jurídica</h2>
-                <p className="text-slate-500 mt-2">Justino requiere tu acceptance de los protocolos.</p>
+                <h2 className="text-2xl font-bold text-navy-900">Expediente Digital Pro</h2>
+                <p className="text-slate-500 text-sm mt-1">Acceso total a Justino para resolver tu caso legal de principio a fin.</p>
               </div>
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-600 space-y-3">
-                <div className="flex gap-3">
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <p><strong>Privacidad:</strong> Tus datos sensibles viajan encriptados.</p>
-                </div>
-                <div className="flex gap-3">
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <p><strong>Veracidad:</strong> Justino asume que los hechos narrados son reales.</p>
-                </div>
-              </div>
-              <label className="flex items-start gap-4 cursor-pointer group p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${acceptedTerms ? 'bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-slate-300 group-hover:border-emerald-500'}`}>
-                  {acceptedTerms && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
-                </div>
-                <input type="checkbox" className="hidden" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} />
-                <span className="text-sm text-slate-700 font-medium select-none">Acepto los términos y responsabilidades legales del servicio.</span>
-              </label>
-              <button onClick={handleNext} disabled={!acceptedTerms} className="w-full py-4 bg-navy-900 text-white rounded-2xl font-bold text-lg shadow-xl hover:bg-navy-800 disabled:opacity-30 disabled:grayscale transition-all transform active:scale-95">Continuar</button>
-            </div>
-          )}
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-navy-900">Membresía Vitalicia</h2>
-                <p className="text-slate-500 mt-2">Acceso total a Justino para este caso específico.</p>
-              </div>
-              <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-2xl p-6 flex justify-between items-center shadow-inner">
+              {/* Price & Plan Card */}
+              <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-2xl p-5 flex justify-between items-center shadow-inner">
                 <div>
-                  <p className="text-emerald-900 font-bold text-lg">Expediente Pro</p>
-                  <p className="text-emerald-600 text-xs font-semibold uppercase tracking-wider">Pago único • Sin rentas</p>
+                  <p className="text-emerald-950 font-bold text-base">Acceso Vitalicio al Caso</p>
+                  <p className="text-emerald-600 text-xs font-semibold uppercase tracking-wider">Pago único • Sin mensualidades</p>
                 </div>
                 <div className="text-right">
                   <span className="text-3xl font-black text-emerald-700 leading-none">$400</span>
@@ -233,139 +233,177 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                 </div>
               </div>
 
-              <div className="space-y-4">
+              {/* Features Included */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs text-slate-600 space-y-2.5">
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Estrategia legal personalizada basada en leyes vigentes</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Redacción forense de todas tus denuncias y demandas listas para firmar</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Dirección exacta y requisitos de entrega física en tu ciudad</span>
+                </div>
+              </div>
+
+              {/* Email Input for Invoice / Receipt */}
+              <div>
+                <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
+                  Correo Electrónico para Factura / Recibo
+                </label>
                 <div className="relative group">
-                  <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">Tu Correo para Facturación</label>
                   <input 
                     type="email" 
                     required 
+                    autoFocus
                     value={emailForPayment} 
-                    onChange={(e) => {setEmailForPayment(e.target.value); setRegisterError('');}} 
-                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
-                    placeholder="tu@email.com" 
+                    onChange={(e) => {
+                      setEmailForPayment(e.target.value); 
+                      setErrorMessage('');
+                    }} 
+                    className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
+                    placeholder="ejemplo@correo.com" 
                   />
-                  {registerError && <p className="text-[10px] text-red-600 mt-1 font-bold">{registerError}</p>}
-                </div>
-
-                <button 
-                  onClick={handlePay} 
-                  disabled={isLoading} 
-                  className="w-full py-5 bg-[#635BFF] hover:bg-[#5851e5] text-white rounded-2xl font-bold text-lg shadow-xl transition-all flex justify-center items-center gap-3 group active:scale-95 disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                  ) : (
-                    <>
-                      <CreditCard className="w-6 h-6" />
-                      Pagar con Stripe
-                    </>
-                  )}
-                </button>
-                <div className="flex items-center justify-center gap-4 opacity-50">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Secure Checkout</span>
-                  <div className="h-4 w-px bg-slate-200"></div>
-                  <div className="flex gap-2">
-                    <div className="w-6 h-4 bg-slate-200 rounded-sm"></div>
-                    <div className="w-6 h-4 bg-slate-200 rounded-sm"></div>
-                    <div className="w-6 h-4 bg-slate-200 rounded-sm"></div>
-                  </div>
+                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                 </div>
               </div>
-              
-              <div className="pt-4 border-t border-slate-100 text-center space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                  Pago Protegido por Stripe 
-                </p>
 
-                {/* Banner Modo Prueba / Preview */}
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-2.5">
-                  <p className="text-xs font-black text-emerald-800 uppercase tracking-wider flex items-center justify-center gap-1.5">
-                    <Zap className="w-4 h-4 text-emerald-600" /> Modo Prueba / Preview Activo
-                  </p>
-                  <p className="text-xs text-emerald-700 leading-relaxed font-medium">
-                    Pasarela en pausa temporal para pruebas. Accede directamente al expediente de Justino:
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                    <button 
-                      type="button"
-                      onClick={() => setStep(3)} 
-                      className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow transition-all"
-                    >
-                      Crear Cuenta (Sin Pago)
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => onComplete({ id: 'demo-user-preview', email: emailForPayment || 'demo@justino.app' })} 
-                      className="flex-1 py-2.5 bg-navy-900 hover:bg-navy-800 text-white rounded-xl font-bold text-xs shadow transition-all"
-                    >
-                      Entrar Directo como Demo
-                    </button>
-                  </div>
+              {/* Legal Terms Acceptance Checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer group p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                <div className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${acceptedTerms ? 'bg-emerald-500 border-emerald-500 shadow shadow-emerald-500/20' : 'border-slate-300 group-hover:border-emerald-500'}`}>
+                  {acceptedTerms && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                 </div>
+                <input 
+                  type="checkbox" 
+                  className="hidden" 
+                  checked={acceptedTerms} 
+                  onChange={(e) => setAcceptedTerms(e.target.checked)} 
+                />
+                <span className="text-xs text-slate-600 font-medium select-none">
+                  Acepto los términos del servicio y confirmo que los hechos que narraré a Justino son verídicos.
+                </span>
+              </label>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Primary Stripe Button */}
+              <button 
+                type="submit" 
+                disabled={isLoading || !emailForPayment} 
+                className="w-full py-4.5 bg-[#635BFF] hover:bg-[#5851e5] text-white rounded-2xl font-bold text-base shadow-xl hover:shadow-indigo-500/25 transition-all flex justify-center items-center gap-3 group active:scale-95 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <CreditCard className="w-5 h-5" />
+                    Pagar con Stripe / Aplicar Cupón
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-center gap-3 text-slate-400 text-xs font-semibold">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>Pago encriptado SSL de 256-bit por Stripe</span>
               </div>
-            </div>
+            </form>
           )}
 
-          {step === 3 && (
-            <form onSubmit={handleRegister} className="space-y-6">
+          {/* STEP 2: USER REGISTRATION IN SUPABASE (AFTER STRIPE SUCCESS) */}
+          {step === 2 && (
+            <form onSubmit={handleRegisterUser} className="space-y-6">
               <div className="text-center">
-                <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
-                  <Check className="w-10 h-10 text-white" strokeWidth={3} />
+                <div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
+                  <Check className="w-8 h-8 text-white" strokeWidth={3} />
                 </div>
-                <h2 className="text-2xl font-bold text-navy-900">¡Pago Validado!</h2>
-                <p className="text-slate-500 mt-2">Crea tus credenciales de acceso privadas.</p>
+                <h2 className="text-2xl font-bold text-navy-900">¡Pago Confirmado!</h2>
+                <p className="text-slate-500 text-sm mt-1">Crea tu contraseña para dar de alta tu cuenta en Supabase y activar tu expediente.</p>
               </div>
-              <div className="space-y-5">
-                <div className="relative group">
-                  <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">Correo Electrónico</label>
-                  <div className="relative">
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
+                    Correo Electrónico
+                  </label>
+                  <div className="relative group">
                     <input 
                       type="email" 
                       required 
-                      autoFocus
                       value={email} 
-                      onChange={(e) => {setEmail(e.target.value); setRegisterError('');}} 
-                      className={`w-full p-4 pl-12 bg-slate-50 border-2 rounded-2xl focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300 ${registerError ? 'border-red-300 bg-red-50' : 'border-slate-100 focus:border-emerald-500 focus:bg-white focus:shadow-lg focus:shadow-emerald-500/5'}`} 
+                      onChange={(e) => {
+                        setEmail(e.target.value); 
+                        setErrorMessage('');
+                      }} 
+                      className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
                       placeholder="tu@email.com" 
                     />
                     <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                   </div>
-                  {registerError && <p className="text-[10px] text-red-600 mt-2 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {registerError}</p>}
                 </div>
                 
-                <div className="relative group">
+                <div>
                   <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-black text-navy-900 uppercase tracking-widest">Clave de Acceso</label>
+                    <label className="text-xs font-black text-navy-900 uppercase tracking-widest">
+                      Crea tu Contraseña
+                    </label>
                     <button 
-                        type="button" 
-                        onClick={() => setShowPassword(!showPassword)} 
-                        className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-tighter"
+                      type="button" 
+                      onClick={() => setShowPassword(!showPassword)} 
+                      className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-tighter"
                     >
-                        {showPassword ? <><EyeOff className="w-3 h-3" /> Ocultar</> : <><Eye className="w-3 h-3" /> Mostrar</>}
+                      {showPassword ? <><EyeOff className="w-3 h-3" /> Ocultar</> : <><Eye className="w-3 h-3" /> Mostrar</>}
                     </button>
                   </div>
-                  <div className="relative">
+                  <div className="relative group">
                     <input 
                       type={showPassword ? "text" : "password"} 
                       required 
+                      autoFocus
                       value={password} 
-                      onChange={(e) => setPassword(e.target.value)} 
-                      className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none focus:shadow-lg focus:shadow-emerald-500/5 transition-all text-slate-900 font-bold placeholder:text-slate-300" 
-                      placeholder="Tu contraseña secreta" 
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorMessage('');
+                      }} 
+                      className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
+                      placeholder="Mínimo 6 caracteres" 
                     />
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                   </div>
                 </div>
               </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
               <button 
                 type="submit" 
                 disabled={isRegistering || !email || !password} 
-                className="w-full py-5 bg-navy-900 text-white rounded-2xl font-bold text-lg hover:bg-navy-800 transition-all flex justify-center items-center gap-3 shadow-2xl shadow-navy-900/20 disabled:opacity-50 transform active:scale-95"
+                className="w-full py-4.5 bg-navy-900 hover:bg-navy-800 text-white rounded-2xl font-bold text-base transition-all flex justify-center items-center gap-3 shadow-xl shadow-navy-900/20 disabled:opacity-50 transform active:scale-95"
               >
-                {isRegistering ? <><Loader2 className="w-6 h-6 animate-spin" /> Encriptando Bóveda...</> : "Empezar Mi Caso Ahora"}
+                {isRegistering ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" /> 
+                    Registrando en Supabase...
+                  </>
+                ) : (
+                  "Activar Cuenta y Comenzar con Justino"
+                )}
               </button>
             </form>
           )}
+
         </div>
       </div>
     </div>
