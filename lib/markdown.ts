@@ -229,5 +229,44 @@ export function cleanBlogMarkdown(md: string): string {
     if (metaDone) out.push(line);
   }
 
+  const cleaned = out.join("\n").trim();
+  // Si el documento NO usa el formato SEJ-01 numerado (pitch / markdown
+  // libre de la familia SEJ-PITCH), el bucle anterior no emite nada.
+  // En ese caso publicamos el cuerpo completo, quitando solo metadata,
+  // instrucciones de copy y comentarios HTML del archivo fuente.
+  if (cleaned === "") return cleanFreeMarkdown(md);
+  return cleaned;
+}
+
+// Fallback para markdown libre (pitches, SEJ-PITCH, artículos sin
+// numeración SEJ-01). Conserva el cuerpo íntegro salvo basura editorial.
+function isFreeMetaHeader(l: string): boolean {
+  const t = l.trim();
+  return (
+    /^#\s/.test(t) ||
+    /^##\s*(1\.|2\.|3\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) ||
+    /CHECKLIST DE APROBACIÓN/.test(t) ||
+    /^---+$/.test(t)
+  );
+}
+function cleanFreeMarkdown(md: string): string {
+  if (!md) return "";
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inComment = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (inComment) {
+      if (t.endsWith("-->")) inComment = false;
+      continue;
+    }
+    if (t.startsWith("<!--")) {
+      if (t.endsWith("-->")) continue;
+      inComment = true;
+      continue;
+    }
+    if (isFreeMetaHeader(line)) continue;
+    out.push(line);
+  }
   return out.join("\n").trim();
 }
