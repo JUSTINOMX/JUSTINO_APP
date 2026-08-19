@@ -1,7 +1,8 @@
 // Renderizador de Markdown PROPIO (sin dependencias externas).
 // Cubre la arquitectura SEJ-01: H1/H2/H3, párrafos, listas, negritas,
 // cursivas, enlaces, blockquotes, código, imágenes y tablas simples.
-// Eliminada cualquier clase de indigo por emerald/slate.
+// Esto elimina la dependencia de 'marked' para que el blog nunca falle
+// por cache de instalación en Vercel.
 
 function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -10,7 +11,7 @@ function escapeHtml(s: string): string {
 function inline(s: string): string {
   let t = escapeHtml(s);
   // code `x`
-  t = t.replace(/`([^`]+)`/g, "<code class=\"px-1.5 py-0.5 bg-slate-100 text-slate-800 rounded text-sm font-mono\">$1</code>");
+  t = t.replace(/`([^`]+)`/g, '<code class="px-1 bg-gray-100 rounded">$1</code>');
   // bold **x** or __x__
   t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   t = t.replace(/__([^_]+)__/g, "<strong>$1</strong>");
@@ -64,11 +65,7 @@ export function renderMarkdown(md: string): string {
       closeList();
       closeTable();
       const level = h[1].length;
-      const sizes = [
-        "text-2xl sm:text-3xl font-bold text-slate-900 mt-8 mb-4 tracking-tight",
-        "text-xl sm:text-2xl font-bold text-slate-900 mt-8 mb-3 tracking-tight",
-        "text-lg sm:text-xl font-semibold text-slate-800 mt-6 mb-2"
-      ];
+      const sizes = ["text-3xl font-bold mb-4", "text-2xl font-bold mt-8 mb-3", "text-xl font-semibold mt-6 mb-2"];
       out.push(`<h${level} class="${sizes[level - 1]}">${inline(h[2])}</h${level}>`);
       i++;
       continue;
@@ -78,7 +75,7 @@ export function renderMarkdown(md: string): string {
     if (/^---+$/.test(trimmed)) {
       closeList();
       closeTable();
-      out.push('<hr class="my-6 border-slate-200" />');
+      out.push('<hr class="my-6 border-gray-200" />');
       i++;
       continue;
     }
@@ -87,7 +84,7 @@ export function renderMarkdown(md: string): string {
     if (trimmed.startsWith(">")) {
       closeList();
       closeTable();
-      out.push(`<blockquote class="border-l-4 border-emerald-500 pl-4 py-1 text-slate-700 italic my-4 bg-emerald-50/50 rounded-r-lg">${inline(trimmed.replace(/^>\s?/, ""))}</blockquote>`);
+      out.push(`<blockquote class="border-l-4 border-indigo-300 pl-4 text-gray-600 italic my-4">${inline(trimmed.replace(/^>\s?/, ""))}</blockquote>`);
       i++;
       continue;
     }
@@ -97,7 +94,7 @@ export function renderMarkdown(md: string): string {
       closeList();
       closeTable();
       const m = /!\[([^\]]*)\]\(([^)]+)\)/.exec(trimmed)!;
-      out.push(`<img src="${m[2].replace(/"/g, "%22")}" alt="${escapeHtml(m[1])}" class="w-full rounded-xl my-6 shadow-sm border border-slate-100" />`);
+      out.push(`<img src="${m[2].replace(/"/g, "%22")}" alt="${escapeHtml(m[1])}" class="w-full rounded-xl my-4" />`);
       i++;
       continue;
     }
@@ -106,21 +103,21 @@ export function renderMarkdown(md: string): string {
     if (trimmed.includes("|") && i + 1 < lines.length && /^\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes("-")) {
       closeList();
       if (!inTable) {
-        out.push('<div class="overflow-x-auto my-6"><table class="w-full text-left border-collapse border border-slate-200 text-sm"><thead>');
+        out.push('<table class="w-full text-left border-collapse my-4"><thead>');
         inTable = true;
       }
       const cells = trimmed.split("|").map((c) => c.trim()).filter((c) => c !== "");
       const isHeaderRow = !out[out.length - 1].includes("</thead>");
       if (isHeaderRow) {
-        out.push("<tr class=\"bg-slate-50\">" + cells.map((c) => `<th class="border border-slate-200 px-4 py-2.5 font-semibold text-slate-900">${inline(c)}</th>`).join("") + "</tr></thead><tbody>");
+        out.push("<tr>" + cells.map((c) => `<th class="border px-3 py-2 bg-gray-50">${inline(c)}</th>`).join("") + "</tr></thead><tbody>");
       } else {
-        out.push("<tr>" + cells.map((c) => `<td class="border border-slate-200 px-4 py-2.5 text-slate-700">${inline(c)}</td>`).join("") + "</tr>");
+        out.push("<tr>" + cells.map((c) => `<td class="border px-3 py-2">${inline(c)}</td>`).join("") + "</tr>");
       }
       i += 2;
       continue;
     } else if (trimmed.includes("|") && inTable) {
       const cells = trimmed.split("|").map((c) => c.trim()).filter((c) => c !== "");
-      out.push("<tr>" + cells.map((c) => `<td class="border border-slate-200 px-4 py-2.5 text-slate-700">${inline(c)}</td>`).join("") + "</tr>");
+      out.push("<tr>" + cells.map((c) => `<td class="border px-3 py-2">${inline(c)}</td>`).join("") + "</tr>");
       i++;
       continue;
     }
@@ -129,7 +126,7 @@ export function renderMarkdown(md: string): string {
     if (/^[-*]\s+/.test(trimmed)) {
       closeTable();
       if (!listOpen) {
-        out.push('<ul class="list-disc pl-6 my-4 space-y-1.5 text-slate-700">');
+        out.push('<ul class="list-disc pl-6 my-3 space-y-1">');
         listOpen = true;
       }
       out.push(`<li>${inline(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
@@ -141,7 +138,7 @@ export function renderMarkdown(md: string): string {
     if (/^\d+\.\s+/.test(trimmed)) {
       closeTable();
       if (!listOpen) {
-        out.push('<ol class="list-decimal pl-6 my-4 space-y-1.5 text-slate-700">');
+        out.push('<ol class="list-decimal pl-6 my-3 space-y-1">');
         listOpen = true;
       }
       out.push(`<li>${inline(trimmed.replace(/^\d+\.\s+/, ""))}</li>`);
@@ -152,12 +149,11 @@ export function renderMarkdown(md: string): string {
     // Paragraph
     closeList();
     closeTable();
-    out.push(`<p class="my-4 leading-relaxed text-slate-700">${inline(trimmed)}</p>`);
+    out.push(`<p class="my-3 leading-relaxed">${inline(trimmed)}</p>`);
     i++;
   }
   closeList();
   closeTable();
-  if (inTable) out.push("</div>");
   return out.join("\n");
 }
 
@@ -167,6 +163,9 @@ export function cleanBlogMarkdown(md: string): string {
   if (!md) return "";
 
   let content = md.replace(/\r\n/g, "\n");
+
+  // Eliminar comentarios HTML (bloque <!-- ... -->) del archivo fuente
+  content = content.replace(/<!--[\s\S]*?-->/g, "");
 
   // Si existe una sección numerada >= 5 (ej. ## 5. INTRODUCCIÓN), cortar todo lo anterior
   const sec5Match = /^##\s*([5-9]|\d{2,})\./m.exec(content);
@@ -200,6 +199,44 @@ export function cleanBlogMarkdown(md: string): string {
     cleanedLines.push(line);
   }
 
-  return cleanedLines.join("\n").trim();
+  const cleaned = cleanedLines.join("\n").trim();
+  // Si el documento NO usa el formato SEJ-01 numerado (pitch / markdown
+  // libre de la familia SEJ-PITCH), el filtro anterior no emite nada.
+  // En ese caso publicamos el cuerpo completo, quitando solo metadata y
+  // comentarios HTML del archivo fuente.
+  if (cleaned === "") return cleanFreeMarkdown(md);
+  return cleaned;
 }
 
+// Fallback para markdown libre (pitches, SEJ-PITCH, artículos sin
+// numeración SEJ-01). Conserva el cuerpo íntegro salvo basura editorial.
+function isFreeMetaHeader(l: string): boolean {
+  const t = l.trim();
+  return (
+    /^#\s/.test(t) ||
+    /^##\s*(1\.|2\.|3\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) ||
+    /CHECKLIST DE APROBACIÓN/.test(t) ||
+    /^---+$/.test(t)
+  );
+}
+function cleanFreeMarkdown(md: string): string {
+  if (!md) return "";
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inComment = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (inComment) {
+      if (t.endsWith("-->")) inComment = false;
+      continue;
+    }
+    if (t.startsWith("<!--")) {
+      if (t.endsWith("-->")) continue;
+      inComment = true;
+      continue;
+    }
+    if (isFreeMetaHeader(line)) continue;
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
