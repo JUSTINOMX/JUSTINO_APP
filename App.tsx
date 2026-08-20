@@ -40,11 +40,42 @@ function App() {
     }
   }, [user]);
 
+  // Helper to ensure user profile & case record in Supabase
+  const ensureUserProfileAndCase = async (userId: string, email: string) => {
+    if (!supabase) return;
+    try {
+      await supabase.from('profiles').upsert({
+        id: userId,
+        email: email,
+        has_active_access: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      const { data: existingCases } = await supabase
+        .from('legal_cases')
+        .select('id')
+        .eq('user_id', userId)
+        .limit(1);
+
+      if (!existingCases || existingCases.length === 0) {
+        await supabase.from('legal_cases').insert([{
+          id: userId,
+          user_id: userId,
+          title: 'Expediente Legal Principal',
+          case_type: 'general',
+          status: 'active'
+        }]);
+      }
+    } catch (err) {
+      console.warn("Could not ensure profile/case in Supabase:", err);
+    }
+  };
+
   useEffect(() => {
     if (!supabase) return;
 
     // Supabase Auth Listener (The Single Source of Truth)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const loggedUser: User = {
           id: session.user.id,
@@ -52,6 +83,9 @@ function App() {
         };
         setUser(loggedUser);
         
+        // Auto-provision profile and default case in Supabase
+        await ensureUserProfileAndCase(session.user.id, session.user.email || '');
+
         // Admin detection (Hint from session storage, but backend protects data)
         const isAdminSession = sessionStorage.getItem('justino_admin_active') === 'true';
         
@@ -81,40 +115,39 @@ function App() {
 
             try {
                 const { data: msgs, error: msgError } = await supabase
-                    .from('messages')
+                    .from('case_messages')
                     .select('*')
-                    .eq('case_id', user.id)
-                    .order('timestamp', { ascending: true });
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: true });
                 
                 if (msgs && !msgError) {
                     if (msgs.length === 0) {
                         setMessages([INITIAL_WELCOME_MESSAGE]);
                     } else {
                         const formattedMessages: Message[] = msgs.map(m => ({
-                            id: m.id,
-                            text: m.text,
-                            sender: m.sender,
-                            timestamp: new Date(m.timestamp),
-                            attachment: m.attachment || undefined
+                            id: m.id || String(m.created_at),
+                            text: m.content || '',
+                            sender: m.role === 'user' ? 'user' : 'bot',
+                            timestamp: new Date(m.created_at || Date.now())
                         }));
                         setMessages(formattedMessages);
                     }
                 }
 
                 const { data: files, error: fileError } = await supabase
-                    .from('documents')
+                    .from('case_vault_documents')
                     .select('*')
-                    .eq('case_id', user.id)
+                    .eq('user_id', user.id)
                     .order('created_at', { ascending: false });
 
-                if (files && !fileError) {
+                if (files && !fileError && files.length > 0) {
                     const formattedFiles: VaultFile[] = files.map(f => ({
                         id: f.id,
-                        name: f.name,
-                        type: f.type,
-                        content: f.content,
+                        name: f.title,
+                        type: f.type || 'application/pdf',
+                        content: f.legal_content,
                         url: f.url,
-                        origin: f.origin as 'generated' | 'uploaded',
+                        origin: (f.origin || 'generated') as 'generated' | 'uploaded',
                         date: f.created_at
                     }));
                     setVaultFiles(formattedFiles);
@@ -152,8 +185,9 @@ function App() {
   const completeOnboarding = async (testUser?: User) => {
     if (testUser) {
       setUser(testUser);
-    } else if (!user) {
-      setUser({ id: 'user-' + Date.now(), email: 'cliente@justino.app' });
+      if (testUser.id && testUser.email) {
+        await ensureUserProfileAndCase(testUser.id, testUser.email);
+      }
     }
     
     // Clear URL query parameters cleanly
@@ -197,15 +231,16 @@ function App() {
 
     if (supabase && user?.id) {
         try {
-            await supabase.from('messages').insert([{
-                id: msg.id,
+            await supabase.from('case_messages').insert([{
                 case_id: user.id,
-                text: msg.text,
-                sender: msg.sender,
-                timestamp: msg.timestamp.toISOString(),
-                attachment: msg.attachment || null
+                user_id: user.id,
+                role: msg.sender === 'user' ? 'user' : 'assistant',
+                content: msg.text,
+                sources: []
             }]);
-        } catch (e) {}
+        } catch (e) {
+            console.warn("Could not record message in case_messages:", e);
+        }
     }
   };
 

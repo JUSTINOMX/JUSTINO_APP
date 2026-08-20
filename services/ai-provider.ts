@@ -175,33 +175,30 @@ export async function generateResponse(userMessages: any[]) {
       const lastMsg = chatMessages[chatMessages.length - 1]?.content || "";
 
       let text = "";
-      try {
-        const result = await genAI.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [...history, { role: 'user', parts: [{ text: lastMsg }] }],
-          config: {
-            systemInstruction: JUSTINO_SYSTEM_PROMPT,
-            temperature: 0.3,
-            maxOutputTokens: 4000,
+      const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro"];
+      
+      for (const modelName of modelsToTry) {
+        try {
+          const result = await genAI.models.generateContent({
+            model: modelName,
+            contents: [...history, { role: 'user', parts: [{ text: lastMsg }] }],
+            config: {
+              systemInstruction: JUSTINO_SYSTEM_PROMPT,
+              temperature: 0.3,
+              maxOutputTokens: 4000,
+            }
+          });
+          text = result.text || result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (text) {
+            console.log(`[AI Provider] Respuesta exitosa recibida de Gemini (${modelName}).`);
+            break;
           }
-        });
-        text = result.text || result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      } catch (gErr: any) {
-        console.warn("[AI Provider] gemini-2.5-flash fallo, probando gemini-2.0-flash...", gErr.message);
-        const result = await genAI.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [...history, { role: 'user', parts: [{ text: lastMsg }] }],
-          config: {
-            systemInstruction: JUSTINO_SYSTEM_PROMPT,
-            temperature: 0.3,
-            maxOutputTokens: 4000,
-          }
-        });
-        text = result.text || result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch (gErr: any) {
+          console.warn(`[AI Provider] ${modelName} no disponible:`, gErr.message);
+        }
       }
 
       if (text) {
-        console.log("[AI Provider] Respuesta exitosa recibida de Gemini.");
         return {
           choices: [{
             message: { content: text },
