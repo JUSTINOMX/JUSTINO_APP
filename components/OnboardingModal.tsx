@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, ShieldCheck } from 'lucide-react';
+import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, ShieldCheck, UserCheck } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -23,7 +23,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
   const [isRegistering, setIsRegistering] = useState(false);
   
   const [emailForPayment, setEmailForPayment] = useState(savedPaymentEmail);
-  const [email, setEmail] = useState(savedPaymentEmail);
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -32,9 +32,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
   useEffect(() => {
     if (sessionId) {
       setStep(2);
-      const stored = sessionStorage.getItem('justino_payment_email');
-      if (stored) {
-        setEmail(stored);
+      const storedEmail = sessionStorage.getItem('justino_payment_email') || '';
+      if (storedEmail) {
+        setEmailForPayment(storedEmail);
+        // Pre-fill username default suggestion based on email prefix if not set
+        const suggested = storedEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+        if (suggested && !username) {
+          setUsername(suggested);
+        }
       }
     }
   }, [sessionId]);
@@ -101,16 +106,17 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
     }
   };
 
-  // Handle Supabase Registration after returning from Stripe
+  // Handle Supabase Registration (Username + Password)
   const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
-    const targetEmail = email.trim();
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
     const targetPassword = password.trim();
+    const targetPaymentEmail = emailForPayment.trim() || sessionStorage.getItem('justino_payment_email') || '';
 
-    if (!targetEmail || !targetEmail.includes('@')) {
-      setErrorMessage('Por favor introduce un correo electrónico válido.');
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setErrorMessage('El nombre de usuario debe contener al menos 3 caracteres (letras, números o guiones).');
       return;
     }
 
@@ -119,35 +125,52 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       return;
     }
 
+    // Format auth email for Supabase Auth internal store
+    const authEmail = `${cleanUsername}@justino.app`;
+
     setIsRegistering(true);
     try {
       if (supabase) {
         // 1. Attempt to create the user account in Supabase
         const { data: signUpData, error: authError } = await supabase.auth.signUp({
-          email: targetEmail,
+          email: authEmail,
           password: targetPassword,
+          options: {
+            data: {
+              username: cleanUsername,
+              payment_email: targetPaymentEmail
+            }
+          }
         });
 
         if (authError) {
-          // If already registered, attempt to log in
+          // If already registered with this username, attempt to log in
           if (authError.message?.toLowerCase().includes('already') || authError.message?.toLowerCase().includes('registered')) {
             const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-              email: targetEmail,
+              email: authEmail,
               password: targetPassword
             });
 
             if (loginErr) {
-              setErrorMessage("Este correo ya tiene una cuenta registrada. Introduce tu contraseña correcta o contacta soporte.");
+              setErrorMessage("Este nombre de usuario ya está registrado. Ingresa tu contraseña correcta o elige otro nombre de usuario.");
               setIsRegistering(false);
               return;
             }
 
             if (loginData.user) {
+              // Ensure profile record in Supabase
+              await supabase.from('profiles').upsert({
+                id: loginData.user.id,
+                email: targetPaymentEmail || authEmail,
+                has_active_access: true,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'id' });
+
               // Clean URL from session_id
               if (typeof window !== 'undefined' && window.location.search) {
                 window.history.replaceState({}, document.title, window.location.pathname);
               }
-              onComplete({ id: loginData.user.id, email: loginData.user.email || targetEmail });
+              onComplete({ id: loginData.user.id, email: targetPaymentEmail || authEmail, username: cleanUsername });
               return;
             }
           }
@@ -158,11 +181,31 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
         }
 
         if (signUpData.user) {
+          // Automatically create/update the profile & legal case in Supabase
+          try {
+            await supabase.from('profiles').upsert({
+              id: signUpData.user.id,
+              email: targetPaymentEmail || authEmail,
+              has_active_access: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+
+            await supabase.from('legal_cases').upsert({
+              id: signUpData.user.id,
+              user_id: signUpData.user.id,
+              title: `Expediente de ${cleanUsername}`,
+              case_type: 'general',
+              status: 'active'
+            }, { onConflict: 'id' });
+          } catch (pErr) {
+            console.warn("Profile/Case upsert note:", pErr);
+          }
+
           // Clean URL from session_id
           if (typeof window !== 'undefined' && window.location.search) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
-          onComplete({ id: signUpData.user.id, email: signUpData.user.email || targetEmail });
+          onComplete({ id: signUpData.user.id, email: targetPaymentEmail || authEmail, username: cleanUsername });
           return;
         }
       }
@@ -170,7 +213,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       // Fallback for environment without live Supabase
       const localUser: User = {
         id: 'user-' + Date.now(),
-        email: targetEmail
+        email: targetPaymentEmail || authEmail,
+        username: cleanUsername
       };
       if (typeof window !== 'undefined' && window.location.search) {
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -178,7 +222,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       onComplete(localUser);
     } catch (err: any) {
       console.error("Auth Exception:", err);
-      setErrorMessage("Error al registrar la cuenta en Supabase. Intenta de nuevo.");
+      setErrorMessage("Error al activar la cuenta. Intenta de nuevo.");
     } finally {
       setIsRegistering(false);
     }
@@ -252,7 +296,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
               {/* Email Input for Invoice / Receipt */}
               <div>
                 <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
-                  Correo Electrónico para Factura / Recibo
+                  Correo Electrónico para Recibo de Pago
                 </label>
                 <div className="relative group">
                   <input 
@@ -298,7 +342,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
               <button 
                 type="submit" 
                 disabled={isLoading || !emailForPayment} 
-                className="w-full py-4.5 bg-[#635BFF] hover:bg-[#5851e5] text-white rounded-2xl font-bold text-base shadow-xl hover:shadow-indigo-500/25 transition-all flex justify-center items-center gap-3 group active:scale-95 disabled:opacity-50"
+                className="w-full py-4.5 bg-[#635BFF] hover:bg-[#5851e5] text-white rounded-2xl font-bold text-base shadow-xl hover:shadow-indigo-500/25 transition-all flex justify-center items-center gap-3 group active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -317,7 +361,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             </form>
           )}
 
-          {/* STEP 2: USER REGISTRATION IN SUPABASE (AFTER STRIPE SUCCESS) */}
+          {/* STEP 2: USERNAME + PASSWORD REGISTRATION (AFTER STRIPE SUCCESS) */}
           {step === 2 && (
             <form onSubmit={handleRegisterUser} className="space-y-6">
               <div className="text-center">
@@ -325,34 +369,36 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                   <Check className="w-8 h-8 text-white" strokeWidth={3} />
                 </div>
                 <h2 className="text-2xl font-bold text-navy-900">¡Pago Confirmado!</h2>
-                <p className="text-slate-500 text-sm mt-1">Crea tu contraseña para dar de alta tu cuenta en Supabase y activar tu expediente.</p>
+                <p className="text-slate-500 text-sm mt-1">Crea tu usuario y contraseña para entrar de inmediato a tu expediente.</p>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
-                    Correo Electrónico
+                    Nombre de Usuario
                   </label>
                   <div className="relative group">
                     <input 
-                      type="email" 
+                      type="text" 
                       required 
-                      value={email} 
+                      autoFocus
+                      value={username} 
                       onChange={(e) => {
-                        setEmail(e.target.value); 
+                        setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, '')); 
                         setErrorMessage('');
                       }} 
                       className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
-                      placeholder="tu@email.com" 
+                      placeholder="ejemplo: edwinsolis" 
                     />
-                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                    <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1 ml-1 font-medium">Usarás este usuario para volver a entrar a tu caso en cualquier momento.</p>
                 </div>
                 
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-xs font-black text-navy-900 uppercase tracking-widest">
-                      Crea tu Contraseña
+                      Crea tu Contraseña / Clave
                     </label>
                     <button 
                       type="button" 
@@ -366,10 +412,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                     <input 
                       type={showPassword ? "text" : "password"} 
                       required 
-                      autoFocus
                       value={password} 
                       onChange={(e) => {
-                        setPassword(e.target.value);
+                        setPassword(e.target.value); 
                         setErrorMessage('');
                       }} 
                       className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
@@ -389,13 +434,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
 
               <button 
                 type="submit" 
-                disabled={isRegistering || !email || !password} 
-                className="w-full py-4.5 bg-navy-900 hover:bg-navy-800 text-white rounded-2xl font-bold text-base transition-all flex justify-center items-center gap-3 shadow-xl shadow-navy-900/20 disabled:opacity-50 transform active:scale-95"
+                disabled={isRegistering || !username || !password} 
+                className="w-full py-4.5 bg-navy-900 hover:bg-navy-800 text-white rounded-2xl font-bold text-base transition-all flex justify-center items-center gap-3 shadow-xl shadow-navy-900/20 disabled:opacity-50 transform active:scale-95 cursor-pointer"
               >
                 {isRegistering ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" /> 
-                    Registrando en Supabase...
+                    Activando tu caso...
                   </>
                 ) : (
                   "Activar Cuenta y Comenzar con Justino"

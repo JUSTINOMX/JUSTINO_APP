@@ -174,9 +174,9 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleLoginSuccess = (testUser?: User) => {
-    if (testUser && !user) {
-      setUser(testUser);
+  const handleLoginSuccess = (loggedUser?: User) => {
+    if (loggedUser) {
+      setUser(loggedUser);
     }
     setShowLoginModal(false);
     setView('dashboard');
