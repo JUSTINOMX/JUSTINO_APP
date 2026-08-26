@@ -190,8 +190,6 @@ export function cleanBlogMarkdown(md: string): string {
     // Eliminar encabezados de ficha / metadata editorial
     if (/^#+\s*(FICHA|METADATA|DATOS EDITORIALES)/i.test(trimmed)) continue;
     if (/CHECKLIST DE APROBACIÓN/i.test(trimmed)) continue;
-    // Secciones internas editoriales (CTA, FUENTES, etc.)
-    if (INTERNAL_SECTIONS.test(trimmed)) continue;
     // Eliminar secciones 16+ (prompts u observaciones)
     if (/^##\s*(1[6-9]|2[0-9])\./i.test(trimmed)) {
       break;
@@ -201,6 +199,10 @@ export function cleanBlogMarkdown(md: string): string {
     line = line.replace(/^(#{1,6})\s*\d+(\.\d+)*\.\s*/, "$1 ");
     // Limpiar sufijos editoriales como (H2)/(H1) que quedan en el título
     line = line.replace(/\s*\(H[1-6]\)\s*$/i, "");
+
+    // Secciones internas editoriales (CTA, FUENTES, ENLACES INTERNOS, etc.):
+    // se filtran tras quitar la numeración para que "## 15. CTA" también caiga.
+    if (INTERNAL_SECTIONS.test(line.trim())) continue;
 
     // Eliminar instrucciones de copy entre paréntesis (ej. "(80-150 palabras...)", "(150-250 palabras)", etc.)
     line = line.replace(/\(\d+[\s–\-]+\d+\s*palabras[^\)]*\)/gi, "");

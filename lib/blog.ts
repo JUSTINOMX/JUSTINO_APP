@@ -209,8 +209,16 @@ function ctaByArea(area?: string): { title: string; subtitle: string; buttonText
 }
 
 function articleBodyHtml(row: any): string {
-  const hero = row.featured_image_url
-    ? `<img src="${escapeHtml(row.featured_image_url)}" alt="${escapeHtml(row.h1 || row.title)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
+  // Imagen hero: usa featured_image_url de la BD; si no está, aplica el mapa
+  // fijo de imágenes por slug (escalable para las 174 fichas del Atlas).
+  const HERO_IMAGES: Record<string, string> = {
+    "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
+    "no-me-pagan-pension-alimenticia-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/no-me-pagan-pension-alimenticia-que-hacer.jpg",
+  };
+  const heroImg = row.featured_image_url || HERO_IMAGES[row.slug] || "";
+  const heroAlt = row.alt_text || row.h1 || row.title || "Justino";
+  const hero = heroImg
+    ? `<img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heroAlt)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
     : "";
   const body = renderMarkdown(cleanBlogMarkdown(row.markdown || ""));
   const areaTag = row.area
