@@ -50,11 +50,11 @@ const ARTICLE_CSS = `
   .jst-cta a svg{width:1.1rem;height:1.1rem;}
   .jst-social{max-width:44rem;margin:2.5rem auto 0;padding:1.5rem;border-top:1px solid #E2E8F0;text-align:center;}
   .jst-social-actions{display:flex;gap:1rem;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:1rem;}
-  .jst-like,.jst-share{display:inline-flex;align-items:center;gap:.45rem;background:#fff;border:1px solid #CBD5E1;color:#475569;padding:.6rem 1.1rem;border-radius:.75rem;font-weight:600;font-size:.95rem;text-decoration:none;cursor:pointer;transition:background .2s,color .2s,border-color .2s;}
-  .jst-like svg,.jst-share svg{width:1.1rem;height:1.1rem;}
-  .jst-like:hover,.jst-share:hover{border-color:#10B981;color:#059669;}
-  .jst-like.is-active{background:#ECFDF5;border-color:#10B981;color:#059669;}
-  .jst-like.is-active svg{fill:#10B981;stroke:#10B981;}
+  .jst-like,.jst-share{display:inline-flex;align-items:center;gap:.45rem;background:#fff;border:1px solid #CBD5E1;color:#059669;padding:.6rem 1.1rem;border-radius:.75rem;font-weight:600;font-size:.95rem;text-decoration:none;cursor:pointer;transition:background .2s,color .2s,border-color .2s;}
+  .jst-like svg,.jst-share svg{width:1.25rem;height:1.25rem;flex-shrink:0;}
+  .jst-like:hover,.jst-share:hover{border-color:#10B981;color:#047857;}
+  .jst-like.is-active{background:#ECFDF5;border-color:#10B981;color:#047857;}
+  .jst-like.is-active svg{fill:#10B981;stroke:#047857;}
   .jst-social-follow{color:#64748B;font-size:.9rem;margin:0 0 .75rem;}
   .jst-social-links{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;}
   .jst-social-links a{color:#059669;font-weight:600;font-size:.9rem;text-decoration:none;}
@@ -287,8 +287,8 @@ ${socialHtml}
 }
 
 // Iconos reutilizables para el bloque social
-const heartSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
-const shareSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
+const heartSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
+const shareSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 
 function buildJsonLd(row: any): object[] {
   const ld: any[] = [
