@@ -201,8 +201,9 @@ export function cleanBlogMarkdown(md: string): string {
     line = line.replace(/\s*\(H[1-6]\)\s*$/i, "");
 
     // Secciones internas editoriales (CTA, FUENTES, ENLACES INTERNOS, etc.):
-    // se filtran tras quitar la numeración para que "## 15. CTA" también caiga.
-    if (INTERNAL_SECTIONS.test(line.trim())) continue;
+    // se filtran tras quitar la numeración y los '#' para que "## 15. CTA" caiga.
+    const titleOnly = line.trim().replace(/^#+\s*/, "").trim();
+    if (INTERNAL_SECTIONS.test(titleOnly)) continue;
 
     // Eliminar instrucciones de copy entre paréntesis (ej. "(80-150 palabras...)", "(150-250 palabras)", etc.)
     line = line.replace(/\(\d+[\s–\-]+\d+\s*palabras[^\)]*\)/gi, "");
