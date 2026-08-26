@@ -1,8 +1,5 @@
-
-// Added React to imports to fix missing namespace error
 import React, { useState } from 'react';
-// Consistently importing ShieldCheck at the top with other lucide-react icons
-import { X, Lock, Eye, EyeOff, AlertCircle, ArrowRight, User as UserIcon, Loader2, ShieldCheck } from 'lucide-react';
+import { X, Lock, Eye, EyeOff, AlertCircle, ArrowRight, User as UserIcon, Loader2, ShieldCheck, Zap } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -12,9 +9,8 @@ interface LoginModalProps {
   onClose: () => void;
 }
 
-// React.FC requires React to be imported
 export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) => {
-  const [email, setEmail] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -22,30 +18,77 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
-
     setError('');
+
+    const identifier = usernameOrEmail.trim();
+    const cleanPassword = password.trim();
+
+    if (!identifier) {
+      setError('Por favor ingresa tu usuario o correo.');
+      return;
+    }
+
+    if (!cleanPassword) {
+      setError('Por favor ingresa tu contraseña.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (supabase) {
+        // Convert username to auth format if needed
+        const formattedEmail = identifier.includes('@') 
+          ? identifier.toLowerCase() 
+          : `${identifier.toLowerCase().replace(/[^a-z0-9_.-]/g, '')}@justino.app`;
 
-      if (authError) {
-        if (authError.message === 'Invalid login credentials') {
-          setError('Correo o contraseña incorrectos.');
-        } else {
-          setError(authError.message);
+        // 1. Try with formatted email / username
+        let { data, error: authError } = await supabase.auth.signInWithPassword({
+          email: formattedEmail,
+          password: cleanPassword,
+        });
+
+        // 2. If it failed and was a raw email, retry as fallback
+        if (authError && identifier.includes('@')) {
+          const retry = await supabase.auth.signInWithPassword({
+            email: identifier.trim(),
+            password: cleanPassword,
+          });
+          data = retry.data;
+          authError = retry.error;
         }
-        return;
+
+        if (authError) {
+          if (authError.message?.toLowerCase().includes('invalid login') || authError.message?.toLowerCase().includes('credentials')) {
+            setError('Usuario o contraseña incorrectos. Verifica tus datos.');
+          } else {
+            setError(authError.message || 'Error al iniciar sesión.');
+          }
+          setIsLoading(false);
+          return;
+        }
+
+        if (data?.user) {
+          const loggedUser: User = {
+            id: data.user.id,
+            email: data.user.email || formattedEmail,
+            username: identifier
+          };
+          onSuccess(loggedUser);
+          return;
+        }
       }
 
-      onSuccess({ id: 'temp', email }); // App.tsx onAuthStateChange will handle the real user state
+      // Fallback preview mode
+      const demoUser: User = {
+        id: 'user-' + Date.now(),
+        email: identifier.includes('@') ? identifier : `${identifier}@justino.app`,
+        username: identifier
+      };
+      onSuccess(demoUser);
     } catch (err: any) {
-      console.error(err);
-      setError('Error de conexión. Intenta nuevamente.');
+      console.error("Login Exception:", err);
+      setError('Error al conectar con el servidor. Intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -72,32 +115,45 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
               <Lock className="w-8 h-8 text-navy-900" />
             </div>
             <h2 className="text-2xl font-bold text-navy-900">Bienvenido</h2>
-            <p className="text-slate-500 mt-2">Accede a tu caso desde cualquier dispositivo.</p>
+            <p className="text-slate-500 mt-2">Accede a tu caso con tu usuario y clave.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
             
             <div>
-              <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">Correo Electrónico</label>
+              <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
+                Usuario o Correo Electrónico
+              </label>
               <div className="relative group">
                 <input 
-                  type="email" 
+                  type="text" 
                   required
                   autoFocus
-                  value={email}
+                  value={usernameOrEmail}
                   onChange={(e) => {
-                    setEmail(e.target.value);
+                    setUsernameOrEmail(e.target.value);
                     setError('');
                   }}
                   className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300"
-                  placeholder="tu@email.com"
+                  placeholder="Tu usuario o correo"
                 />
                 <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 w-5 h-5 transition-colors" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">Contraseña</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-black text-navy-900 uppercase tracking-widest">
+                  Contraseña / Clave
+                </label>
+                <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)} 
+                  className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 uppercase tracking-tighter"
+                >
+                  {showPassword ? <><EyeOff className="w-3 h-3" /> Ocultar</> : <><Eye className="w-3 h-3" /> Mostrar</>}
+                </button>
+              </div>
               <div className="relative group">
                 <input 
                   type={showPassword ? "text" : "password"} 
@@ -111,40 +167,45 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
                   placeholder="••••••••"
                 />
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 w-5 h-5 transition-colors" />
-                <button 
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 focus:outline-none transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
               </div>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 p-3 rounded-xl border border-red-100 animate-pulse-fast">
-                <AlertCircle className="w-4 h-4" />
-                {error}
+              <div className="flex items-center gap-2 text-red-600 text-xs font-bold bg-red-50 p-3 rounded-xl border border-red-100">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
             <button 
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-4 bg-navy-900 text-white rounded-2xl font-bold shadow-xl hover:bg-navy-800 transition-all flex items-center justify-center gap-2 group disabled:opacity-70 transform active:scale-95"
+              type="submit" 
+              disabled={isLoading || !usernameOrEmail || !password}
+              className="w-full py-4 bg-navy-900 text-white rounded-2xl font-bold shadow-xl hover:bg-navy-800 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 transform active:scale-95 cursor-pointer"
             >
               {isLoading ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Verificando acceso...</span>
+                </>
               ) : (
-                  <>
-                    Abrir Expediente
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
+                <>
+                  <span>Abrir Expediente</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </>
               )}
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center space-y-4">
+             <button
+               type="button"
+               onClick={() => onSuccess({ id: 'demo-user-preview', email: 'demo@justino.app', username: 'demo' })}
+               className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+             >
+               <Zap className="w-4 h-4 text-emerald-600" />
+               Entrar en Modo Prueba / Preview
+             </button>
+
              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
                 <ShieldCheck className="w-3 h-3 text-emerald-500" /> Encriptación AES-256
              </div>

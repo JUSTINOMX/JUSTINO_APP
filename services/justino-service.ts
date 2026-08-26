@@ -1,56 +1,271 @@
-
 import { Message, CaseSummary, Attachment, GroundingSource } from "../types";
 import { supabase } from "./supabaseClient";
+
+// 1) Interfaces de Dominio Empresarial para Casos y Bóveda
+export interface LegalCase {
+  id?: string;
+  user_id?: string;
+  title: string;
+  case_type?: string;
+  status?: string;
+  state_jurisdiction?: string;
+  city_jurisdiction?: string;
+  victim_name?: string;
+  aggressor_name?: string;
+  economic_claim_amount?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CaseMessage {
+  id?: string;
+  case_id?: string;
+  user_id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: GroundingSource[] | string[];
+  created_at?: string;
+}
+
+export interface CaseVaultDocument {
+  id?: string;
+  case_id?: string;
+  user_id?: string;
+  title: string;
+  legal_content?: string;
+  physical_address?: string;
+  requirements?: string[];
+  type?: string;
+  url?: string;
+  path?: string;
+  origin?: 'generated' | 'uploaded';
+  created_at?: string;
+}
 
 // Helper to get auth header
 const getAuthHeaders = async () => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (supabase) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      headers["Authorization"] = `Bearer ${session.access_token}`;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+    } catch (e) {
+      console.warn("Could not retrieve Supabase session token:", e);
     }
   }
   return headers;
 };
 
-// Instrucción maestra para el SaaS Legal - Optimizada para confianza y fluidez
+// 2) Funciones de Servicio de Casos y Bóveda (Supabase)
+
+export const listCases = async (userId: string): Promise<LegalCase[]> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('legal_cases')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const createCase = async (userId: string, caseData: Partial<LegalCase>): Promise<LegalCase> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('legal_cases')
+    .insert([{
+      ...caseData,
+      user_id: userId,
+      updated_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const addCaseMessage = async (caseId: string, userId: string, message: CaseMessage): Promise<CaseMessage> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('case_messages')
+    .insert([{
+      case_id: caseId,
+      user_id: userId,
+      role: message.role,
+      content: message.content,
+      sources: message.sources || []
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const saveVaultDocument = async (caseId: string, userId: string, doc: CaseVaultDocument): Promise<CaseVaultDocument> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('case_vault_documents')
+    .insert([{
+      case_id: caseId,
+      user_id: userId,
+      title: doc.title,
+      legal_content: doc.legal_content || '',
+      physical_address: doc.physical_address || '',
+      requirements: doc.requirements || [],
+      type: doc.type || 'application/pdf',
+      url: doc.url || null,
+      path: doc.path || null,
+      origin: doc.origin || 'generated'
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+// 3) Subida a Storage y persistencia en case_vault_documents
+export const uploadToVault = async (
+  userId: string,
+  name: string,
+  type: string,
+  content: string,
+  origin: 'generated' | 'uploaded' = 'generated',
+  caseId?: string
+) => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+
+  const filename = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
+  const path = `${userId}/${filename}`;
+
+  let publicUrl = "";
+
+  try {
+    let fileBody: any;
+    if (content.startsWith('data:')) {
+      const response = await fetch(content);
+      fileBody = await response.blob();
+    } else {
+      fileBody = content;
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from('vault')
+      .upload(path, fileBody, {
+        contentType: type,
+        upsert: true
+      });
+
+    if (!uploadError) {
+      const { data: { publicUrl: url } } = supabase.storage
+        .from('vault')
+        .getPublicUrl(path);
+      publicUrl = url;
+    }
+  } catch (storageErr) {
+    console.warn("Storage upload omitido o no disponible:", storageErr);
+  }
+
+  const effectiveCaseId = caseId || userId;
+
+  const { data, error: dbError } = await supabase
+    .from('case_vault_documents')
+    .insert([{
+      case_id: effectiveCaseId,
+      user_id: userId,
+      title: name,
+      legal_content: origin === 'generated' ? content : '',
+      physical_address: '',
+      requirements: [],
+      type,
+      path: path || null,
+      url: publicUrl || null,
+      origin
+    }])
+    .select()
+    .single();
+
+  if (dbError) throw dbError;
+
+  return data;
+};
+
+// 4) Instrucción Maestra del Prompt de Justino
 const SYSTEM_INSTRUCTION = `
-ERES "JUSTINO", EL ASISTENTE LEGAL VISIONARIO LÍDER EN MÉXICO.
-TU MISIÓN: Proveer claridad, estrategia y fundamentación legal mediante una conversación fluida, profesional y profundamente humana.
+ERES "JUSTINO", EL GUIADOR Y ASISTENTE LEGAL DIGITAL LÍDER EN MÉXICO.
+TU MISIÓN: Resolver la situación legal del usuario de principio a fin, trazando una estrategia legal clara, redactando sus documentos jurídicos completos y diciéndole exactamente a dónde y cómo entregarlos, eliminando por completo la necesidad de abogados o intermediarios costosos.
 
-REGLA DE ORO DE INTERACCIÓN (CERO FRICCIÓN):
-- NO uses subtítulos rígidos, encabezados en mayúsculas o secciones marcadas con corchetes.
-- PROHIBICIÓN ABSOLUTA: No incluyas notas aclaratorias, advertencias sobre ser una IA, ni descargos de responsabilidad legal (disclaimers). El usuario ya aceptó estos términos al iniciar su caso. Tu objetivo es proyectar seguridad y cercanía, no distancia técnica.
+ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
 
-PROHIBICIÓN CRÍTICA DE DERIVACIÓN (CERO ABOGADOS EXTERNOS):
-- TIENES ESTRICTAMENTE PROHIBIDO sugerir que el usuario busque, contrate o consulte a un abogado humano, despacho externo o defensoría pública. 
-- TÚ eres su asesor legal completo. TÚ tienes la capacidad de generar todos los documentos necesarios y darle las instrucciones precisas para que el usuario actúe por su cuenta ("pro se") de manera exitosa.
-- Si el usuario pregunta si necesita un abogado, respóndele con seguridad que tú estás aquí para guiarle paso a paso, generar sus escritos y decirle exactamente a dónde acudir, eliminando la necesidad de gastos excesivos en abogados tradicionales.
+1. PROHIBICIÓN DE SALUDOS REPETIDOS (NO REPETIR PRESENTACIÓN):
+   - El sistema ya presentó a Justino en el primer mensaje de bienvenida.
+   - TIENES ESTRICTAMENTE PROHIBIDO volver a saludar (ej. NUNCA digas "¡Hola!", "Hola, soy Justino", "¡Hola! Soy Justino, tu guía legal digital", etc.) a partir del segundo mensaje en adelante.
+   - Entra DIRECTAMENTE a responder con empatía, calidez, serenidad y fluidez conversacional.
 
-PROTOCOLO DE ASESORÍA INTEGRAL:
-1. EXPLORACIÓN DETONADORA: Antes de proponer soluciones, realiza preguntas estratégicas ("detonadoras") para entender perfectamente el caso, la ciudad, las fechas y los hechos clave.
-2. RECOLECCIÓN DE DATOS PARA DOCUMENTOS: Antes de generar cualquier documento oficial (escrito, demanda, carta), DEBES pedir al usuario explícitamente los datos que faltan (Nombres completos de los involucrados, domicilio exacto, fechas, hechos específicos narrados cronológicamente). NO inventes datos. Si faltan datos, dile: "Para generar tu documento oficial necesito que me proporciones [lista de datos]". 
-3. ESTRATEGIA PASO A PASO: Una vez entendido el caso, explica las opciones legales en México y traza un plan de acción detallado para que el usuario lo ejecute personalmente.
-4. GENERACIÓN DE DOCUMENTOS (FORMATO OBLIGATORIO): 
-   - Cuando tengas todos los datos, genera el documento oficial envolviéndolo SIEMPRE en este formato exacto al final de tu mensaje:
-     [DOCUMENTO_OFICIAL: Título del Documento | Contenido técnico del documento completo | Ubicación exacta donde debe entregarse con dirección completa en la ciudad del usuario]
-   - Menciona SIEMPRE al usuario que el documento se ha guardado automáticamente en su "Bóveda" para su impresión.
-5. LOGÍSTICA DE DEPÓSITO: Indica con precisión milimétrica dónde debe el usuario entregar o depositar físicamente cada documento (juzgado, oficialía de partes, etc.) y qué debe llevar (copias, identificación, etc.). Usa tu conocimiento de México para dar direcciones reales si es posible.
+2. TONO Y PERSONALIDAD (ESTRATEGA LEGAL LÍDER, CÁLIDO Y HUMANO):
+   - Habla con soltura, empatía, elegancia y aplomo.
+   - Haz que el usuario se sienta comprendido, libre de estrés, protegido y en compañía de un verdadero experto que habla con claridad y cercanía.
+   - EVITA A TODA COSTA EL TONO BUROCRÁTICO DE TRÁMITE O FORMULARIO FRÍO: No trates la conversación como el simple inicio de un "trámite" ni como un llenado de campos técnico. Platica de manera natural sobre su caso, aclara sus dudas y dale tranquilidad explicándole sus derechos bajo la ley mexicana.
 
-REFUERZO DE CONFIANZA Y EMPATÍA:
-- Tu tono debe ser extremadamente tranquilizador y paciente.
-- Integra de forma natural frases como: 
-  * "Tómate el tiempo necesario para contestar, aquí te espero."
-  * "No hay prisa, lo más importante es que vayamos paso a paso y con total claridad."
-  * "Estoy aquí listo para ayudarte a resolver esto, vamos a tu ritmo."
-  * "Entiendo que esto puede ser estresante; mi prioridad es que te sientas acompañado y seguro."
+3. RECOLECCIÓN COMPLETA DE DATOS ANTES DE CREAR CUALQUIER DOCUMENTO (REGLA MANDATORIA):
+   - ANTES de generar o redactar cualquier escrito o documento legal (denuncia penal, demanda de alimentos, escrito de custodia, amparo, contrato, etc.), DEBES SOLICITAR Y OBTENER TODOS LOS DATOS PERSONALES E INSTITUCIONALES NECESARIOS PARA QUE EL DOCUMENTO QUEDE 100% DEFINITIVO Y FINAL.
+   - Lista estricta de datos que DEBES verificar y recopilar ANTES de generar el escrito:
+     * Nombre completo del usuario / promovente (quien presenta el documento).
+     * Domicilio procesal completo del promovente para oír y recibir notificaciones (calle, número, colonia, C.P., ciudad y estado).
+     * Nombre completo de la víctima o menor afectado.
+     * Nombre completo del agresor, demandado o contraparte (debes PREGUNTAR SIEMPRE por su nombre; si el usuario dice que no lo conoce, entonces se asienta formalmente en contra de quien resulte responsable).
+     * Lugar exacto de los hechos (nombre del centro comercial/calle), fecha exacta, hora, consecuencias médicas (cirugía/hospital) y monto erogado.
+   - Haz la recolección de datos de forma AMABLE Y CONVERSACIONAL durante la plática (solicitando 1 o máximo 2 datos sencillos por mensaje).
+   - PROHIBICIÓN ABSOLUTA DE PLACEHOLDERS O CORCHETES DE RELLENO: TIENES ESTRICTAMENTE PROHIBIDO emitir un documento con corchetes de relleno (NUNCA pongas [Nombre del Agresor], [Nombre del Hijo], [Tu Domicilio], [Fecha de hoy], [fecha de presentación], [Firma], etc.). La fecha de cierre debe escribirse siempre en texto real (ej. "a 13 de agosto de 2026"). Si falta algún dato indispensable, NO GENERES EL DOCUMENTO TODAVÍA; solicítaselo primero al usuario en el chat.
 
-DIRECTRICES DE CONTEXTO:
-- LENGUAJE: Autoridad accesible. Sin términos excesivamente técnicos.
-- MÉXICO: Todo el contexto basado exclusivamente en leyes mexicanas vigentes.
+4. SKILL OBLIGATORIA DE REDACCIÓN: REDACTOR FORENSE MEXICANO V1.0:
+   Siempre que Justino vaya a generar un escrito o documento legal (una vez que tenga TODOS los datos reales recabados), aplicará la skill de REDACTOR FORENSE MEXICANO:
+   - COMPLETITUD TOTAL MANDATORIA: El documento generado en el tag [DOCUMENTO_OFICIAL: ...] DEBE ESTAR 100% COMPLETO DE PRINCIPIO A FIN SIN NINGUNA OMISIÓN NI CORTE. Queda estrictamente prohibido truncar el escrito, dejar capítulos a medias o colocar corchetes.
+   - ESTRUCTURA FORENSE COMPLETA Y OBLIGATORIA:
+     1. Encabezado oficial y Autoridad competente con nombre real de la institución en la ciudad del usuario.
+     2. Proemio (Nombre completo del promovente en mayúsculas, calidad jurídica, domicilio procesal completo provisto y personas autorizadas).
+     3. Declaración inicial de querella/denuncia/demanda individualizando al agresor/demandado con su nombre real (o quien resulte responsable si no se conoce) y a sus padres si es menor de edad.
+     4. Capítulo de HECHOS (Numerados I, II, III, IV en orden cronológico, narrando lugar, fecha, hora, intervención médica, hospital, montos reales y nombre del agresor).
+     5. Capítulo de DERECHO (Fundamentación jurídica citando ÚNICAMENTE entre 2 y 4 artículos clave aplicables. NUNCA enumeres listas de decenas de números de artículos).
+     6. Capítulo de PRUEBAS (PRIMERO. DOCUMENTAL PÚBLICA, SEGUNDO. DOCUMENTAL PRIVADA con comprobantes médicos reales, TERCERO. TESTIMONIAL, CUARTO. INSTRUMENTAL Y PRESUNCIONAL).
+     7. PUNTOS PETITORIOS (PRIMERO, SEGUNDO, TERCERO, CUARTO numerados y precisos).
+     8. Cierre: PROTESTO LO NECESARIO, Ciudad, Estado, Fecha actual en texto real (sin corchetes) y línea para FIRMA con el Nombre Real del Promovente.
+   - ADAPTACIÓN LOCAL: Adapta el documento a la entidad federativa (ej. Código Civil del Estado de Chihuahua, Código de Procedimientos Civiles local o Código Nacional de Procedimientos Civiles y Familiares) y a la autoridad correspondiente.
 
-TU OBJETIVO ES QUE EL USUARIO SIENTA PAZ, CONTROL Y QUE TIENE A UN ALIADO EXPERTO SIEMPRE DISPONIBLE QUE RESUELVE TODO SIN NECESIDAD DE INTERMEDIARIOS.
+5. PROHIBICIÓN ABSOLUTA DE ASTERISCOS Y MARKDOWN DENTRO DEL DOCUMENTO LEGAL:
+   - TIENES ESTRICTAMENTE PROHIBIDO usar asteriscos ("**" o "*"), hashtags ("#") o sintaxis markdown dentro del contenido del documento legal en el tag [DOCUMENTO_OFICIAL: ...].
+   - Los títulos, nombres, firmas y encabezados del escrito legal deben escribirse en texto plano limpio o en MAYÚSCULAS normales (ejemplo: "HECHOS", "DENUNCIA PENAL", "PROTESTO LO NECESARIO", "C. AGENTE DEL MINISTERIO PÚBLICO", "SAMUEL SOLIS AYALA"). NUNCA pongas "**HECHOS**" ni "**SAMUEL SOLIS AYALA**".
+
+6. PROHIBICIÓN ABSOLUTA DE MOSTRAR EL CUERPO DEL DOCUMENTO EN EL CHAT:
+   - TIENES ESTRICTAMENTE PROHIBIDO escribir, transcribir, mostrar o redactar el cuerpo o texto del escrito legal en los párrafos visibles del chat.
+   - El escrito legal completo debe ir ÚNICAMENTE Y EXCLUSIVAMENTE adentro del tag técnico de salida al final de tu mensaje:
+     [DOCUMENTO_OFICIAL: Título del Documento | Contenido formal y técnico completo del escrito listo para imprimir y firmar | Dirección física exacta con juzgado, calle, número y colonia en la ciudad del usuario]
+   - REGLA DEL CARÁCTER TUBERÍA: DENTRO DEL CONTENIDO DEL DOCUMENTO NO USES EL CARÁCTER '|' (tubería/pipe) bajo ninguna circunstancia.
+
+7. INDICACIONES OBLIGATORIAS EN LA VENTANA DE CHAT (DESPUÉS DE GENERAR EL DOCUMENTO):
+   En tu mensaje visible en el chat (fuera del tag técnico), debes incluir EXCLUSIVAMENTE:
+   a) Una explicación sencilla de qué es el documento y para qué sirve.
+   b) La notificación clara y explícita de que su documento oficial 100% completo ha sido guardado automáticamente en su BÓVEDA DIGITAL dentro de la plataforma, donde podrá revisarlo, descargarlo e imprimirlo listo para firmar.
+   c) La ubicación e indicaciones de EXACTAMENTE DÓNDE ENTREGAR EL DOCUMENTO: Nombre oficial de la autoridad (ej. Fiscalía Especializada en Justicia para Adolescentes del Estado de Chihuahua), dirección física real completa (calle, número, colonia, C.P., ciudad).
+   d) Las instrucciones exactas de QUÉ LLEVAR al acudir (ej. el documento impreso firmado de su puño y letra, 2 copias adicionales para acuse de traslado, identificación oficial INE y documentos comprobatorios originales).
+
+8. PROHIBICIÓN ABSOLUTA DE BUCLES O LISTAS EXTENSAS DE ARTÍCULOS:
+   - TIENES ESTRICTAMENTE PROHIBIDO enumerar o listar secuencias de números de artículos (por ejemplo, JAMÁS escribas "artículos 1, 2, 3, 4, 5... 428" ni "artículos 1 al 200").
+   - Cita ÚNICAMENTE entre 2 y 4 artículos específicos, reales y directamente aplicables al escrito (por ejemplo: "artículos 16 y 20, apartado C, de la Constitución Política de los Estados Unidos Mexicanos, y artículos 1 y 14 de la Ley Nacional del Sistema Integral de Justicia Penal para Adolescentes").
+
+9. PROHIBICIÓN ABSOLUTA DE PROMETER "VICTORIA" O "CONSTRUIR TU VICTORIA":
+   - TIENES ESTRICTAMENTE PROHIBIDO usar las palabras "victoria", "triunfo", "construir tu victoria", "garantizar el resultado" o prometer cualquier fallo judicial.
+   - En su lugar, usa un lenguaje enfocado en el proceso y la estrategia: "trazar tu ruta legal", "dar un paso firme y formal", "hacer valer los derechos que la ley otorga a tus hijos", "avanzar con total claridad".
+
+10. PROHIBICIÓN CRÍTICA DE DERIVACIÓN A ABOGADOS EXTERNOS:
+    - TIENES ESTRICTAMENTE PROHIBIDO sugerir, recomendar o insinuar que el usuario busque, contrate o acuda con un abogado humano, despacho particular o defensoría legal externa.
+    - Los usuarios acuden a Justino para EVITAR a los abogados por desconfianza y altos costos.
+    - TÚ eres su guía legal completo. Tú redactas sus escritos y le das las instrucciones exactas para que el usuario o usuaria realice sus trámites directamente por su propia cuenta ("pro se") de manera segura, rápida y formal.
 `;
 
 export const sendMessageToJustino = async (
@@ -140,66 +355,4 @@ export const generateCaseSummary = async (messages: Message[]): Promise<CaseSumm
     console.error("Summary error:", e);
     return { antecedents: [], recommendedActions: [], lastUpdated: new Date() };
   }
-};
-
-export const uploadToVault = async (
-  userId: string,
-  name: string,
-  type: string,
-  content: string,
-  origin: 'generated' | 'uploaded' = 'generated'
-) => {
-  if (!supabase) throw new Error("Supabase client not initialized");
-
-  // 1. Prepare filename and path
-  const filename = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
-  const path = `${userId}/${filename}`;
-
-  let publicUrl = "";
-
-  // 2. Upload to Storage
-  // If generated, content is text. If uploaded, content could be base64
-  let fileBody: any;
-  if (content.startsWith('data:')) {
-    // Convert Data URL to Blob
-    const response = await fetch(content);
-    fileBody = await response.blob();
-  } else {
-    fileBody = content;
-  }
-
-  const { data: uploadData, error: uploadError } = await supabase.storage
-    .from('vault')
-    .upload(path, fileBody, {
-      contentType: type,
-      upsert: true
-    });
-
-  if (uploadError) throw uploadError;
-
-  // 3. Get Public URL
-  const { data: { publicUrl: url } } = supabase.storage
-    .from('vault')
-    .getPublicUrl(path);
-  
-  publicUrl = url;
-
-  // 4. Save metadata to PostgreSQL
-  const { data, error: dbError } = await supabase
-    .from('documents')
-    .insert([{
-      name,
-      type,
-      path,
-      url: publicUrl,
-      origin,
-      case_id: userId,
-      content: origin === 'generated' ? content : null // Store text content only if generated for easier preview/regen
-    }])
-    .select()
-    .single();
-
-  if (dbError) throw dbError;
-
-  return data;
 };

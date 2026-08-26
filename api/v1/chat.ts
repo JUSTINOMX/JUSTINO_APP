@@ -21,19 +21,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let lastError = "No API keys configured";
 
-  // 1. Try DeepSeek (8s timeout)
+  // 1. Try DeepSeek (25s timeout for complete legal documents)
   if (hasDeepSeek) {
     try {
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 8000);
+      const id = setTimeout(() => controller.abort(), 25000);
       
+      const payload = {
+        ...body,
+        max_tokens: 4096
+      };
+
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${deepseekKey.trim()}`
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
       clearTimeout(id);
@@ -45,18 +50,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 2. Try Moonshot (5s timeout)
+  // 2. Try Moonshot (15s timeout)
   if (hasMoonshot) {
     try {
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 5000);
+      const id = setTimeout(() => controller.abort(), 15000);
+      const payload = {
+        ...body,
+        max_tokens: 4096
+      };
       const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${moonshotKey.trim()}`
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
       clearTimeout(id);
@@ -67,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 3. Final Fallback: Gemini (Fastest)
+  // 3. Final Fallback: Gemini
   if (hasGemini) {
     try {
       const genAI = new GoogleGenAI({ apiKey: geminiKey!.trim() });
@@ -83,8 +92,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }));
 
       const result = await (genAI.models as any).generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: [...history, { role: 'user', parts: [{ text: last }] }],
+        config: {
+          maxOutputTokens: 8192,
+          temperature: 0.15
+        },
         system_instruction: system
       });
 

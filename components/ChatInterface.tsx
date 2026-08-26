@@ -12,11 +12,11 @@ interface ChatInterfaceProps {
 }
 
 const STRATEGIC_STEPS = [
-  "Iniciando Protocolo Specter...",
+  "Iniciando Análisis Estratégico...",
   "Analizando debilidades de la contraparte...",
-  "Fundamentando con Código Civil Federal...",
+  "Fundamentando con legislación mexicana vigentes...",
   "Buscando jurisprudencia ganadora...",
-  "Diseñando jugada de jaque mate...",
+  "Diseñando la mejor jugada legal...",
   "Blindando tu declaración..."
 ];
 
@@ -29,22 +29,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const welcomeDispatchedRef = useRef(false);
-
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const hasWelcome = messages.some(m => m.id === 'welcome');
-      if (messages.length === 0 && !hasWelcome && !welcomeDispatchedRef.current) {
-        welcomeDispatchedRef.current = true;
-        onNewMessage({
-          id: 'welcome',
-          text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
-          sender: 'bot',
-          timestamp: new Date(),
-        });
-      }
-    }, 500);
-    return () => clearTimeout(timer);
+    if (messages.length === 0) {
+      onNewMessage({
+        id: 'welcome',
+        text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+        sender: 'bot',
+        timestamp: new Date(),
+      });
+    }
   }, [messages, onNewMessage]);
 
   useEffect(() => {
@@ -57,12 +50,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
     return () => clearInterval(interval);
   }, [isSending]);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
-    }
-  }, [input]);
+  const sanitizeDocumentText = (txt: string) => {
+    if (!txt) return "";
+    let clean = txt.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+    clean = clean.replace(/(?:\b\d+,\s*){5,}\b\d+\b/g, '1, 2, 14, 16, 20');
+    clean = clean.replace(/,\s*,/g, ',').replace(/,\s*( de| por| en| con| a| que)\b/gi, '$1');
+    return clean;
+  };
+
+  const renderFormattedText = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return <strong key={index} className="font-bold text-navy-950">{part.slice(2, -2)}</strong>;
+      } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+        return <span key={index} className="font-semibold text-navy-900">{part.slice(1, -1)}</span>;
+      }
+      return part;
+    });
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -102,29 +109,85 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
       const response = await sendMessageToJustino(currentInput, messages, currentAttachment || undefined);
       
       // Parse for generated documents wrapped in [DOCUMENTO_OFICIAL: ... ]
-      const docRegex = /\[DOCUMENTO_OFICIAL:\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\]/gs;
-      const docMatches = [...response.text.matchAll(docRegex)];
+      const docTagRegex = /\[DOCUMENTO_OFICIAL:\s*([\s\S]+?)\]/gi;
+      let docMatches = [...response.text.matchAll(docTagRegex)];
       
       let finalBotText = response.text;
       
       if (docMatches.length > 0) {
         docMatches.forEach(match => {
-          const [fullMatch, title, content, location] = match;
-          // Extract data
+          const [fullMatch, inside] = match;
+          const parts = inside.split('|');
+          let title = "Documento Legal";
+          let content = "";
+          let location = "Juzgado de lo Familiar o Dependencia Competente de tu ciudad";
+
+          if (parts.length >= 3) {
+            title = parts[0].trim();
+            location = parts[parts.length - 1].trim();
+            content = parts.slice(1, -1).join('|').trim();
+          } else if (parts.length === 2) {
+            title = parts[0].trim();
+            content = parts[1].trim();
+          } else {
+            content = inside.trim();
+          }
+
+          content = sanitizeDocumentText(content.replace(/^\d+:\s*/gm, ''));
+          title = sanitizeDocumentText(title);
+          location = sanitizeDocumentText(location);
+
           onAddFile(
-            title.trim(), 
+            title, 
             "Solicitud Legal", 
-            `${content.trim()}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location.trim()}\n(Presentar en original y 2 copias con identificación oficial)`,
+            `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
             'generated'
           );
-          // Remove the technical block from the visible message
+
           finalBotText = finalBotText.replace(fullMatch, "");
         });
         
-        // Clean up text
         finalBotText = finalBotText.trim();
         if (!finalBotText) {
-          finalBotText = "He generado tu documento oficial. Ya lo puedes encontrar en tu Bóveda listo para descargar e imprimir.";
+          finalBotText = "Tu documento oficial está listo y guardado en tu Bóveda Digital para que lo puedas revisar, descargar e imprimir cuando desees.";
+        }
+      } else if (response.text.includes("[DOCUMENTO_OFICIAL:")) {
+        // Fallback parser in case closing bracket ']' was omitted or cut off by the AI model
+        const startIndex = response.text.indexOf("[DOCUMENTO_OFICIAL:");
+        const rawTag = response.text.substring(startIndex);
+        const inside = rawTag.replace(/^\[DOCUMENTO_OFICIAL:\s*/i, '').replace(/\]\s*$/, '').trim();
+        const parts = inside.split('|');
+        let title = "Documento Legal";
+        let content = "";
+        let location = "Juzgado de lo Familiar o Dependencia Competente de tu ciudad";
+        
+        if (parts.length >= 3) {
+          title = parts[0].trim();
+          location = parts[parts.length - 1].trim();
+          content = parts.slice(1, -1).join('|').trim();
+        } else if (parts.length === 2) {
+          title = parts[0].trim();
+          content = parts[1].trim();
+        } else {
+          content = inside;
+        }
+
+        content = sanitizeDocumentText(content.replace(/^\d+:\s*/gm, ''));
+        title = sanitizeDocumentText(title);
+        location = sanitizeDocumentText(location);
+
+        if (content.length > 10) {
+          onAddFile(
+            title,
+            "Solicitud Legal",
+            `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
+            'generated'
+          );
+
+          finalBotText = response.text.substring(0, startIndex).trim();
+          if (!finalBotText) {
+            finalBotText = "Tu documento oficial está listo y guardado en tu Bóveda Digital para que lo puedas revisar, descargar e imprimir cuando desees.";
+          }
         }
       }
 
@@ -159,7 +222,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
             }`}>
               <div className="space-y-4">
                 <div className="whitespace-pre-wrap leading-relaxed text-[15px] font-medium">
-                  {msg.text}
+                  {renderFormattedText(msg.text)}
                 </div>
                 
                 {msg.sources && (

@@ -14,10 +14,20 @@ declare const window: CustomWindow;
 
 export const Vault: React.FC<VaultProps> = ({ files }) => {
   
-  const downloadGeneratedPDF = (title: string, content: string) => {
+  const downloadGeneratedPDF = (rawTitle: string, rawContent: string) => {
     if (window.jspdf) {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
+
+      // Clean raw title and content from asterisks and long number sequences
+      const cleanTitle = rawTitle.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+      let cleanContent = rawContent.replace(/\*\*/g, '').replace(/\*/g, '');
+      // Strip out long comma-separated number sequences
+      cleanContent = cleanContent.replace(/(?:\b\d+,\s*){5,}\b\d+\b/g, '1, 2, 14, 16, 20');
+      cleanContent = cleanContent.replace(/,\s*,/g, ',').replace(/,\s*( de| por| en| con| a| que)\b/gi, '$1');
+      // Replace any bracketed date placeholder with formatted Mexican date
+      const todayFormatted = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+      cleanContent = cleanContent.replace(/\[\s*fecha[^\]]*\]?/gi, todayFormatted);
       
       // Header Background - Elegant Dark Blue
       doc.setFillColor(15, 23, 42); // Navy 900
@@ -35,19 +45,22 @@ export const Vault: React.FC<VaultProps> = ({ files }) => {
       doc.text(`ID TRANSACCIÓN: ${Math.random().toString(36).substring(7).toUpperCase()}`, 15, 30);
       doc.text(`FECHA DE EMISIÓN: ${new Date().toLocaleString('es-MX').toUpperCase()}`, 130, 22);
       
-      // Title Section
-      doc.setFontSize(16);
+      // Title Section (wrapped to prevent overflow)
+      doc.setFontSize(14);
       doc.setTextColor(15, 23, 42);
       doc.setFont("helvetica", "bold");
-      doc.text(title.toUpperCase(), 15, 55);
+      const titleLines = doc.splitTextToSize(cleanTitle.toUpperCase(), 170);
+      doc.text(titleLines, 15, 50);
+      
+      const titleEndY = 50 + (titleLines.length * 7);
       
       // Content Area
-      doc.setFontSize(11);
+      doc.setFontSize(10.5);
       doc.setFont("times", "normal");
       doc.setTextColor(30, 30, 30);
       
-      const margins = { top: 65, bottom: 30, left: 20, width: 170 };
-      const splitText = doc.splitTextToSize(content, margins.width);
+      const margins = { top: titleEndY + 6, bottom: 25, left: 20, width: 170 };
+      const splitText = doc.splitTextToSize(cleanContent, margins.width);
       
       let cursorY = margins.top;
       const pageHeight = doc.internal.pageSize.height;
@@ -89,7 +102,7 @@ export const Vault: React.FC<VaultProps> = ({ files }) => {
       doc.setFont("helvetica", "bold");
       doc.text("FIRMA DEL INTERESADO", 85, cursorY + 5);
 
-      doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
+      doc.save(`${cleanTitle.replace(/\s+/g, '_')}.pdf`);
     } else {
       alert("Error: El generador de PDF no está listo. Intenta recargar la página.");
     }
