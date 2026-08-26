@@ -212,7 +212,7 @@ function ctaByArea(area?: string): { title: string; subtitle: string; buttonText
 // Prioridad en el render: este mapa > featured_image_url de la BD.
 const HERO_IMAGES: Record<string, string> = {
   "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
-  // "no-me-pagan-pension-alimenticia-que-hacer": pendiente — imagen no existe en Supabase (404). Agregar /img/blog/ cuando Edwin la provea.
+  "no-me-pagan-pension-alimenticia-que-hacer": "/img/blog/no-me-pagan-pension-alimenticia-que-hacer.jpg",
   "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
   "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
   "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
