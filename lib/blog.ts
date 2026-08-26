@@ -213,7 +213,7 @@ function articleBodyHtml(row: any): string {
   // fijo de imágenes por slug (escalable para las 174 fichas del Atlas).
   const HERO_IMAGES: Record<string, string> = {
     "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
-    "no-me-pagan-pension-alimenticia-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/no-me-pagan-pension-alimenticia-que-hacer.jpg",
+    // "no-me-pagan-pension-alimenticia-que-hacer": pendiente — imagen no existe en Supabase (404). Agregar /img/blog/ cuando Edwin la provea.
     "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
     "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
     "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
