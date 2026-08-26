@@ -167,8 +167,7 @@ export function renderMarkdown(md: string): string {
 export function cleanBlogMarkdown(md: string): string {
   if (!md) return "";
 
-  let content = md.replace(/
-\n/g, "\n");
+  let content = md.replace(/\r\n/g, "\n");
 
   // Si existe una sección numerada >= 5 (ej. ## 5. INTRODUCCIÓN), cortar todo lo anterior
   const sec5Match = /^##\s*([5-9]|\d{2,})\./m.exec(content);

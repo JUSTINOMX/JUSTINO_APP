@@ -14,7 +14,6 @@ function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-<<<<<<< HEAD
 // Logo SVG esmeralda igual al de la landing (index.html)
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-7 h-7" aria-hidden="true">
   <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -71,8 +70,6 @@ const ARTICLE_CSS = `
   @media (max-width:640px){.jst-article{padding:1.25rem 1rem 3rem;}.jst-article h1{font-size:1.75rem;}}
 `;
 
-=======
->>>>>>> 70d123e82e4b7cae28aaa3b07054625db9b38464
 function baseLayout(opts: {
   title: string;
   description: string;
@@ -269,7 +266,6 @@ ${hero}
 ${cta}
 ${socialHtml}
 </article>`;
-}
 }
 
 // Iconos reutilizables para el bloque social
