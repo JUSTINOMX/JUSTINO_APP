@@ -56,7 +56,18 @@ const ARTICLE_CSS = `
   .jst-cta a{display:inline-flex;align-items:center;gap:.5rem;background:#10B981;color:#fff;padding:0.85rem 1.75rem;border-radius:0.85rem;font-weight:600;font-size:1.05rem;text-decoration:none;transition:background .2s,transform .15s;box-shadow:0 6px 16px -6px rgba(16,185,129,.6);}
   .jst-cta a:hover{background:#059669;transform:translateY(-1px);}
   .jst-cta a svg{width:1.1rem;height:1.1rem;}
-  .jst-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(18rem,1fr));gap:1.5rem;margin-top:1.5rem;}
+  .jst-social{max-width:44rem;margin:2.5rem auto 0;padding:1.5rem;border-top:1px solid #E2E8F0;text-align:center;}
+  .jst-social-actions{display:flex;gap:1rem;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:1rem;}
+  .jst-like,.jst-share{display:inline-flex;align-items:center;gap:.45rem;background:#fff;border:1px solid #CBD5E1;color:#475569;padding:.6rem 1.1rem;border-radius:.75rem;font-weight:600;font-size:.95rem;text-decoration:none;cursor:pointer;transition:background .2s,color .2s,border-color .2s;}
+  .jst-like svg,.jst-share svg{width:1.1rem;height:1.1rem;}
+  .jst-like:hover,.jst-share:hover{border-color:#10B981;color:#059669;}
+  .jst-like.is-active{background:#ECFDF5;border-color:#10B981;color:#059669;}
+  .jst-like.is-active svg{fill:#10B981;stroke:#10B981;}
+  .jst-social-follow{color:#64748B;font-size:.9rem;margin:0 0 .75rem;}
+  .jst-social-links{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;}
+  .jst-social-links a{color:#059669;font-weight:600;font-size:.9rem;text-decoration:none;}
+  .jst-social-links a:hover{text-decoration:underline;}
+
   .jst-card-item{display:block;background:#fff;border:1px solid #E2E8F0;border-radius:1rem;overflow:hidden;transition:box-shadow .2s,transform .2s;}
   .jst-card-item:hover{box-shadow:0 10px 25px -5px rgba(16,185,129,.25);transform:translateY(-2px);}
   .jst-card-item img{width:100%;height:12rem;object-fit:cover;}
@@ -214,13 +225,38 @@ function articleBodyHtml(row: any): string {
     <p>${escapeHtml(cta.sub)}</p>
     <a href="/">${escapeHtml(cta.btn)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></a>
   </div>`;
+
+  // Bloque fijo de redes sociales (like / compartir / seguir) para TODOS los artículos.
+  // URLs definitivas por confirmar de Edwin; placeholders coherentes con la marca.
+  const SHARE_URL = `${BASE}/blog/${row.slug}`;
+  const socialHtml = `
+  <div class="jst-social" role="region" aria-label="Comparte y sigue a Justino">
+    <div class="jst-social-actions">
+      <button class="jst-like" type="button" aria-pressed="false" onclick="this.classList.toggle('is-active');this.setAttribute('aria-pressed', this.classList.contains('is-active'));">${heartSvg}<span>Me gusta</span></button>
+      <a class="jst-share" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}" target="_blank" rel="noopener">${shareSvg}<span>Compartir</span></a>
+      <a class="jst-share" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(row.h1 || row.title || 'Justino')}" target="_blank" rel="noopener">${shareSvg}<span>Twittear</span></a>
+    </div>
+    <p class="jst-social-follow">Síguenos y acompaña a más mexicanos:</p>
+    <div class="jst-social-links">
+      <a href="https://www.facebook.com/justino.app" target="_blank" rel="noopener">Facebook</a>
+      <a href="https://www.instagram.com/justino.app" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://www.tiktok.com/@justino.app" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.linkedin.com/company/justino" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://www.youtube.com/@justino" target="_blank" rel="noopener">YouTube</a>
+    </div>
+  </div>`;
   return `<article class="jst-article">
 ${hero}
 <h1>${escapeHtml(row.h1 || row.title)}</h1>
 ${body}
 ${ctaHtml}
+${socialHtml}
 </article>`;
 }
+
+// Iconos reutilizables para el bloque social
+const heartSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
+const shareSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 
 function buildJsonLd(row: any): object[] {
   const ld: any[] = [

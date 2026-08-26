@@ -169,12 +169,19 @@ export function cleanBlogMarkdown(md: string): string {
   const out: string[] = [];
   let started = false;
 
+  // Secciones editoriales INTERNAS que jamás se publican en el cuerpo visible
+  // del blog: son vocabulario de producción (CTA, fuentes, enlaces sugeridos,
+  // prompts de imagen, alt text, OG, checklist). El CTA visual lo inyecta
+  // blog.ts por área; el resto es metadata que el lector no debe ver.
+  const INTERNAL_SECTIONS = /^(CTA|FUENTES|ENLACES INTERNOS SUGERIDOS|IMÁGENES SUGERIDAS|PROMPT MAESTRO PARA IMÁGENES|ALT TEXT|PROPUESTA OPEN GRAPH)\b/i;
+
   // Patrones de basura editorial que nunca se publican
   const isMetaHeader = (l: string) => {
     const t = l.trim();
     return (
       /^#\s/.test(t) || // H1 de ficha / metadata
-      /^##\s*(1\.|2\.|3\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) || // secciones meta/SEO (4 es el H1 real, se maneja abajo)
+      /^##\s*(1\.|2\.|3\.|16\.|17\.|18\.|19\.|20\.|21\.)/.test(t) || // secciones meta/SEO (4 es el H candidate)
+      INTERNAL_SECTIONS.test(t) || // secciones internas editoriales
       /CHECKLIST DE APROBACIÓN/.test(t) ||
       /^---+$/.test(t)
     );
@@ -211,9 +218,10 @@ export function cleanBlogMarkdown(md: string): string {
         dropNextPara = true;
         continue;
       }
-      // n >= 5: cuerpo real, normalizado sin número
+      // n >= 5: cuerpo real, normalizado sin número ni sufijos editoriales
       metaDone = true;
-      out.push(`## ${secNum[2].trim()}`);
+      const title = secNum[2].replace(/\s*\(H[1-6]\)\s*$/i, "").trim();
+      out.push(`## ${title}`);
       continue;
     }
 
