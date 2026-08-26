@@ -214,6 +214,14 @@ function articleBodyHtml(row: any): string {
   const HERO_IMAGES: Record<string, string> = {
     "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
     "no-me-pagan-pension-alimenticia-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/no-me-pagan-pension-alimenticia-que-hacer.jpg",
+    "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
+    "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
+    "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
+    "justino-modelo-negocio-retencion": "/img/blog/justino-modelo-negocio-retencion.jpg",
+    "justino-el-mercado-que-casi-nadie-ve": "/img/blog/justino-el-mercado-que-casi-nadie-ve.jpg",
+    "justino-siempre-ahi-cuando-el-caso-se-arrastra": "/img/blog/justino-siempre-ahi-cuando-el-caso-se-arrastra.jpg",
+    "justino-ordena-tu-expediente": "/img/blog/justino-ordena-tu-expediente.jpg",
+    "justino-te-explica-lo-que-no-entendias": "/img/blog/justino-te-explica-lo-que-no-entendias.jpg",
   };
   const heroImg = row.featured_image_url || HERO_IMAGES[row.slug] || "";
   const heroAlt = row.alt_text || row.h1 || row.title || "Justino";
