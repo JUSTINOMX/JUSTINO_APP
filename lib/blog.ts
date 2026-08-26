@@ -208,22 +208,23 @@ function ctaByArea(area?: string): { title: string; subtitle: string; buttonText
   };
 }
 
+// Mapa fijo de imágenes hero por slug (autónomo, no depende de Supabase).
+// Prioridad en el render: este mapa > featured_image_url de la BD.
+const HERO_IMAGES: Record<string, string> = {
+  "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
+  // "no-me-pagan-pension-alimenticia-que-hacer": pendiente — imagen no existe en Supabase (404). Agregar /img/blog/ cuando Edwin la provea.
+  "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
+  "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
+  "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
+  "justino-modelo-negocio-retencion": "/img/blog/justino-modelo-negocio-retencion.jpg",
+  "justino-el-mercado-que-casi-nadie-ve": "/img/blog/justino-el-mercado-que-casi-nadie-ve.jpg",
+  "justino-siempre-ahi-cuando-el-caso-se-arrastra": "/img/blog/justino-siempre-ahi-cuando-el-caso-se-arrastra.jpg",
+  "justino-ordena-tu-expediente": "/img/blog/justino-ordena-tu-expediente.jpg",
+  "justino-te-explica-lo-que-no-entendias": "/img/blog/justino-te-explica-lo-que-no-entendias.jpg",
+};
+
 function articleBodyHtml(row: any): string {
-  // Imagen hero: usa featured_image_url de la BD; si no está, aplica el mapa
-  // fijo de imágenes por slug (escalable para las 174 fichas del Atlas).
-  const HERO_IMAGES: Record<string, string> = {
-    "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
-    // "no-me-pagan-pension-alimenticia-que-hacer": pendiente — imagen no existe en Supabase (404). Agregar /img/blog/ cuando Edwin la provea.
-    "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
-    "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
-    "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
-    "justino-modelo-negocio-retencion": "/img/blog/justino-modelo-negocio-retencion.jpg",
-    "justino-el-mercado-que-casi-nadie-ve": "/img/blog/justino-el-mercado-que-casi-nadie-ve.jpg",
-    "justino-siempre-ahi-cuando-el-caso-se-arrastra": "/img/blog/justino-siempre-ahi-cuando-el-caso-se-arrastra.jpg",
-    "justino-ordena-tu-expediente": "/img/blog/justino-ordena-tu-expediente.jpg",
-    "justino-te-explica-lo-que-no-entendias": "/img/blog/justino-te-explica-lo-que-no-entendias.jpg",
-  };
-  // Prioridad: mapa local por slug (autónomo, no depende de Supabase) > BD.
+  // Imagen hero: prioriza el mapa fijo por slug (autónomo) sobre featured_image_url de la BD.
   const heroImg = HERO_IMAGES[row.slug] || row.featured_image_url || "";
   const heroAlt = row.alt_text || row.h1 || row.title || "Justino";
   const hero = heroImg
@@ -352,7 +353,7 @@ export function setupBlogRoutes(app: Express) {
         .map(
           (r: any) => `
         <a href="/blog/${r.slug}" class="jst-card group">
-          ${r.featured_image_url ? `<div class="aspect-video w-full overflow-hidden bg-slate-100"><img src="${escapeHtml(r.featured_image_url)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="${escapeHtml(r.h1 || r.title)}" /></div>` : ""}
+          ${HERO_IMAGES[r.slug] || r.featured_image_url ? `<div class="aspect-video w-full overflow-hidden bg-slate-100"><img src="${escapeHtml(HERO_IMAGES[r.slug] || r.featured_image_url)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="${escapeHtml(r.h1 || r.title)}" /></div>` : ""}
           <div class="p-5 flex flex-col flex-grow">
             ${r.area ? `<span class="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full w-fit mb-2">${escapeHtml(r.area)}</span>` : ""}
             <h2 class="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors leading-snug mb-2">${escapeHtml(r.h1 || r.title)}</h2>
