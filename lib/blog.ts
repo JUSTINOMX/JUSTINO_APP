@@ -223,7 +223,8 @@ function articleBodyHtml(row: any): string {
     "justino-ordena-tu-expediente": "/img/blog/justino-ordena-tu-expediente.jpg",
     "justino-te-explica-lo-que-no-entendias": "/img/blog/justino-te-explica-lo-que-no-entendias.jpg",
   };
-  const heroImg = row.featured_image_url || HERO_IMAGES[row.slug] || "";
+  // Prioridad: mapa local por slug (autónomo, no depende de Supabase) > BD.
+  const heroImg = HERO_IMAGES[row.slug] || row.featured_image_url || "";
   const heroAlt = row.alt_text || row.h1 || row.title || "Justino";
   const hero = heroImg
     ? `<img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heroAlt)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
