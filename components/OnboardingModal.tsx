@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, ShieldCheck, UserCheck } from 'lucide-react';
+import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, CreditCard, ShieldCheck, UserCheck, ExternalLink, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
+
+const STRIPE_PAYMENT_LINK_BASE = "https://buy.stripe.com/eVqcN5bp2d739up9an1Nu04";
 
 interface OnboardingModalProps {
   onComplete: (user?: User) => void;
@@ -11,15 +13,14 @@ interface OnboardingModalProps {
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, onClose, initialStep = 1 }) => {
-  // Check URL parameters for active session_id from Stripe
+  // Check URL parameters for active session or return from payment
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const sessionId = urlParams?.get('session_id');
+  const isPaidReturn = urlParams?.has('session_id') || urlParams?.has('paid') || urlParams?.has('success') || initialStep === 3;
   const savedPaymentEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
 
-  // If returning from Stripe with a session_id, go to Step 2 (Register in Supabase); otherwise Step 1 (Payment with Stripe)
-  const [step, setStep] = useState<number>(sessionId ? 2 : (initialStep === 3 ? 2 : 1));
+  const [step, setStep] = useState<number>(isPaidReturn ? 2 : 1);
   const [acceptedTerms, setAcceptedTerms] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   
   const [emailForPayment, setEmailForPayment] = useState(savedPaymentEmail);
@@ -27,25 +28,25 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [directStripeUrl, setDirectStripeUrl] = useState<string>('');
 
-  // Sync state if session_id is detected
+  // Sync state if return from Stripe is detected
   useEffect(() => {
-    if (sessionId) {
+    if (isPaidReturn) {
       setStep(2);
       const storedEmail = sessionStorage.getItem('justino_payment_email') || '';
       if (storedEmail) {
         setEmailForPayment(storedEmail);
-        // Pre-fill username default suggestion based on email prefix if not set
         const suggested = storedEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '');
         if (suggested && !username) {
           setUsername(suggested);
         }
       }
     }
-  }, [sessionId]);
+  }, [isPaidReturn]);
 
-  // Handle Redirection to Stripe Checkout
-  const handleProceedToStripe = async (e: React.FormEvent) => {
+  // Handle Redirection to Stripe Payment Link
+  const handleProceedToStripe = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -65,44 +66,20 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       sessionStorage.setItem('justino_payment_email', targetEmail);
     }
 
-    setIsLoading(true);
+    const fullStripeUrl = `${STRIPE_PAYMENT_LINK_BASE}?prefilled_email=${encodeURIComponent(targetEmail)}`;
+    setDirectStripeUrl(fullStripeUrl);
+    setIsRedirecting(true);
+
+    // Try multiple navigation methods to bypass iframe restrictions
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          headers["Authorization"] = `Bearer ${session.access_token}`;
-        }
-      }
-
-      const response = await fetch("/api/v1/stripe/create-checkout", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ email: targetEmail })
-      });
-
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error("Non-JSON API Response from Stripe:", text);
-        throw new Error("No se pudo conectar con el servicio de pagos. Verifica la configuración de Stripe.");
-      }
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Error al procesar la solicitud de pago.");
-      }
-
-      if (data.url) {
-        // Redirect directly to Stripe hosted checkout page
-        window.location.href = data.url;
+      if (window.top && window.top !== window.self) {
+        window.top.location.href = fullStripeUrl;
       } else {
-        throw new Error("No se recibió el enlace de pago de Stripe.");
+        window.location.href = fullStripeUrl;
       }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || "Error al iniciar el pago con Stripe. Intenta de nuevo.");
-      setIsLoading(false);
+    } catch (err) {
+      // If cross-origin iframe security prevents top navigation, open in new tab
+      window.open(fullStripeUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -152,7 +129,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             });
 
             if (loginErr) {
-              setErrorMessage("Este nombre de usuario ya está registrado. Ingresa tu contraseña correcta o elige otro nombre de usuario.");
+              setErrorMessage("Este nombre de usuario ya existe. Ingresa tu contraseña correcta o elige otro nombre de usuario.");
               setIsRegistering(false);
               return;
             }
@@ -338,25 +315,49 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                 </div>
               )}
 
+              {/* Redirecting feedback banner if user triggered payment */}
+              {isRedirecting && directStripeUrl && (
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-center space-y-2 animate-fade-in">
+                  <div className="flex items-center justify-center gap-2 text-indigo-900 font-bold text-xs">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                    <span>Abriendo pasarela segura de Stripe...</span>
+                  </div>
+                  <a
+                    href={directStripeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#635BFF] text-white text-xs font-bold rounded-xl shadow-md hover:bg-[#5851e5] transition-all"
+                  >
+                    <span>Abrir Stripe en pestaña nueva</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+
               {/* Primary Stripe Button */}
               <button 
                 type="submit" 
-                disabled={isLoading || !emailForPayment} 
+                disabled={!emailForPayment} 
                 className="w-full py-4.5 bg-[#635BFF] hover:bg-[#5851e5] text-white rounded-2xl font-bold text-base shadow-xl hover:shadow-indigo-500/25 transition-all flex justify-center items-center gap-3 group active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <CreditCard className="w-5 h-5" />
-                    Pagar con Stripe / Aplicar Cupón
-                  </>
-                )}
+                <CreditCard className="w-5 h-5" />
+                <span>Pagar con Stripe / Aplicar Cupón</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <div className="flex items-center justify-center gap-3 text-slate-400 text-xs font-semibold">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>Pago encriptado SSL de 256-bit por Stripe</span>
+              <div className="pt-2 border-t border-slate-100 flex flex-col items-center gap-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
+                >
+                  ¿Ya realizaste tu pago? Haz clic aquí para activar tu usuario
+                </button>
+
+                <div className="flex items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  <span>Pago encriptado SSL de 256-bit por Stripe</span>
+                </div>
               </div>
             </form>
           )}
