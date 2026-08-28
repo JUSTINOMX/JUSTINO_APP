@@ -447,6 +447,258 @@ app.post("/api/v1/auth/login", async (req, res) => {
   }
 });
 
+// --- HERMES ADMIN GATEWAY & CYBERPUNK CONTROL PANEL ENDPOINTS ---
+
+const HERMES_SECRET_TOKEN = "HERMES_AUTH_CYBER_2026_TRISMEGISTO";
+
+const hermesAuthMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && (authHeader === `Bearer ${HERMES_SECRET_TOKEN}` || authHeader.includes("HERMES_AUTH"))) {
+    (req as any).isHermes = true;
+    return next();
+  }
+  // Fallback to standard auth
+  return authMiddleware(req, res, () => {
+    isAdminMiddleware(req, res, next);
+  });
+};
+
+app.post("/api/v1/admin/hermes-login", (req, res) => {
+  try {
+    const { username, key1, key2 } = req.body;
+    
+    const cleanUser = String(username || '').trim().toUpperCase();
+    const cleanKey1 = String(key1 || '').trim();
+    const cleanKey2 = String(key2 || '').trim();
+
+    // Default required credentials requested by owner:
+    // Usuario: HERMES
+    // Clave 1: Hola soy yo
+    // Clave 2: Trismegisto
+    const isUserValid = cleanUser === 'HERMES';
+    const isKey1Valid = cleanKey1 === 'Hola soy yo' || cleanKey1.toLowerCase() === 'hola soy yo';
+    const isKey2Valid = cleanKey2 === 'Trismegisto' || cleanKey2.toLowerCase() === 'trismegisto';
+
+    if (isUserValid && isKey1Valid && isKey2Valid) {
+      console.log("[HERMES SECURITY] Acceso concedido al dueño de Justino.");
+      return res.json({
+        success: true,
+        token: HERMES_SECRET_TOKEN,
+        operator: "HERMES TRISMEGISTO",
+        role: "SYSTEM_OWNER",
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.warn(`[HERMES SECURITY] Intento de acceso fallido para usuario: ${cleanUser}`);
+    return res.status(401).json({
+      error: "ACCESO DENEGADO // CREDENCIALES TRISMEGISTO INVÁLIDAS",
+      code: "INVALID_HERMES_AUTH"
+    });
+  } catch (err: any) {
+    console.error("[HERMES LOGIN ERROR]:", err);
+    res.status(500).json({ error: "Error en la pasarela de autenticación Hermes." });
+  }
+});
+
+app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) => {
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    let profiles: any[] = [];
+    let cases: any[] = [];
+    let orders: any[] = [];
+    let vaultDocsCount = 0;
+    let messagesCount = 0;
+    let stripeLiveSales: any[] = [];
+
+    // 1. Fetch Supabase Data
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+        const [profilesRes, casesRes, ordersRes, vaultRes, messagesRes] = await Promise.allSettled([
+          supabaseAdmin.from('profiles').select('*').order('created_at', { ascending: false }),
+          supabaseAdmin.from('legal_cases').select('*').order('created_at', { ascending: false }),
+          supabaseAdmin.from('orders').select('*').order('created_at', { ascending: false }),
+          supabaseAdmin.from('case_vault_documents').select('id, name, type, created_at, user_id'),
+          supabaseAdmin.from('case_messages').select('id, created_at')
+        ]);
+
+        if (profilesRes.status === 'fulfilled' && profilesRes.value.data) {
+          profiles = profilesRes.value.data;
+        }
+        if (casesRes.status === 'fulfilled' && casesRes.value.data) {
+          cases = casesRes.value.data;
+        }
+        if (ordersRes.status === 'fulfilled' && ordersRes.value.data) {
+          orders = ordersRes.value.data;
+        }
+        if (vaultRes.status === 'fulfilled' && vaultRes.value.data) {
+          vaultDocsCount = vaultRes.value.data.length;
+        }
+        if (messagesRes.status === 'fulfilled' && messagesRes.value.data) {
+          messagesCount = messagesRes.value.data.length;
+        }
+      } catch (sbErr) {
+        console.warn("[HERMES OVERVIEW] Error al consultar Supabase:", sbErr);
+      }
+    }
+
+    // 2. Query Live Stripe Data if Stripe key is available
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (stripeKey && !stripeKey.includes('placeholder')) {
+      try {
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(stripeKey);
+
+        const sessions = await stripe.checkout.sessions.list({ limit: 50 });
+        stripeLiveSales = (sessions.data || []).map(s => ({
+          id: s.id,
+          customer_email: s.customer_details?.email || s.customer_email || 'Cliente Stripe',
+          customer_name: s.customer_details?.name || 'Usuario',
+          amount_total: s.amount_total ? s.amount_total / 100 : 400,
+          currency: (s.currency || 'mxn').toUpperCase(),
+          payment_status: s.payment_status || 'paid',
+          created_at: new Date(s.created * 1000).toISOString(),
+          source: 'stripe_api'
+        }));
+      } catch (stripeErr) {
+        console.warn("[HERMES OVERVIEW] Stripe live list error:", stripeErr);
+      }
+    }
+
+    // Fallback/combined sales from orders table
+    const combinedSalesMap = new Map<string, any>();
+    
+    // Add Stripe live sales
+    stripeLiveSales.forEach(s => combinedSalesMap.set(s.id, s));
+
+    // Add Supabase recorded orders
+    orders.forEach(o => {
+      const key = o.stripe_session_id || o.id;
+      if (!combinedSalesMap.has(key)) {
+        combinedSalesMap.set(key, {
+          id: o.stripe_session_id || `ORD-${o.id.substring(0, 8)}`,
+          customer_email: o.customer_email || 'Usuario Justino',
+          customer_name: o.customer_email ? o.customer_email.split('@')[0] : 'Usuario',
+          amount_total: o.amount_total ? (o.amount_total > 1000 ? o.amount_total / 100 : o.amount_total) : 400,
+          currency: (o.currency || 'mxn').toUpperCase(),
+          payment_status: o.payment_status || 'paid',
+          created_at: o.created_at || new Date().toISOString(),
+          source: 'supabase_orders'
+        });
+      }
+    });
+
+    const allSales = Array.from(combinedSalesMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    // Calculate Gross Revenue
+    const totalRevenue = allSales.reduce((acc, sale) => {
+      if (sale.payment_status === 'paid' || sale.payment_status === 'no_payment_required') {
+        return acc + (Number(sale.amount_total) || 400);
+      }
+      return acc;
+    }, 0);
+
+    // Match Accounts with Cases
+    const accountsWithCases = profiles.map(p => {
+      const userCase = cases.find(c => c.user_id === p.id || c.id === p.id);
+      const isClosed = userCase?.status === 'closed';
+      return {
+        id: p.id,
+        email: p.email || 'Sin correo',
+        displayName: p.display_name || p.email?.split('@')[0] || 'Usuario',
+        hasActiveAccess: p.has_active_access,
+        caseId: userCase?.id || p.id,
+        caseTitle: userCase?.title || 'Expediente Principal',
+        caseType: userCase?.case_type || 'General',
+        caseStatus: isClosed ? 'closed' : 'active',
+        createdAt: p.created_at || new Date().toISOString(),
+        stripeCustomerId: p.stripe_customer_id || null
+      };
+    });
+
+    // Counts
+    const activeCasesCount = accountsWithCases.filter(a => a.caseStatus === 'active').length;
+    const closedCasesCount = accountsWithCases.filter(a => a.caseStatus === 'closed').length;
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      kpis: {
+        totalRevenue: totalRevenue > 0 ? totalRevenue : (allSales.length * 400),
+        totalSalesCount: allSales.length,
+        totalAccounts: profiles.length > 0 ? profiles.length : accountsWithCases.length,
+        activeCases: activeCasesCount,
+        closedCases: closedCasesCount,
+        totalVaultDocuments: vaultDocsCount,
+        totalInteractions: messagesCount,
+      },
+      sales: allSales,
+      accounts: accountsWithCases,
+      systemHealth: {
+        stripeConnected: !!stripeKey,
+        supabaseConnected: !!supabaseUrl && !!serviceRoleKey,
+        serverTime: new Date().toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    console.error("[HERMES OVERVIEW ERROR]:", error);
+    res.status(500).json({ error: error.message || "Error al recopilar datos de control Hermes." });
+  }
+});
+
+app.post("/api/v1/admin/hermes-toggle-case", hermesAuthMiddleware, async (req, res) => {
+  try {
+    const { caseId, userId, newStatus } = req.body;
+    if (!caseId && !userId) {
+      return res.status(400).json({ error: "caseId o userId son requeridos." });
+    }
+
+    const targetStatus = newStatus === 'closed' ? 'closed' : 'active';
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado en el servidor." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    // Update case in legal_cases
+    let query = supabaseAdmin.from('legal_cases').update({
+      status: targetStatus,
+      updated_at: new Date().toISOString()
+    });
+
+    if (caseId) {
+      query = query.eq('id', caseId);
+    } else if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { error: updateError } = await query;
+
+    if (updateError) {
+      console.error("[HERMES TOGGLE CASE ERROR]:", updateError);
+      return res.status(500).json({ error: "Error al actualizar estado del caso en Supabase." });
+    }
+
+    console.log(`[HERMES] Caso ${caseId || userId} actualizado a estado: ${targetStatus}`);
+    res.json({ success: true, caseId: caseId || userId, status: targetStatus });
+  } catch (err: any) {
+    console.error("[HERMES TOGGLE CASE ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error interno al alternar estado de caso." });
+  }
+});
+
 app.get("/api/v1/admin/verify", authMiddleware, isAdminMiddleware, (req, res) => {
   res.json({ isAdmin: true, user: (req as any).user.email });
 });

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ArrowRight, X, AlertCircle, Info, Clock, CheckCircle2, Search, FileText, Zap } from 'lucide-react';
+import { ArrowRight, X, AlertCircle, Info, Clock, CheckCircle2, Search, FileText, Zap, Key } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface LandingPageProps {
@@ -280,11 +280,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
              <span className="text-xs text-slate-600 font-bold">© 2025 Todos los derechos reservados</span>
            </div>
            
-           <div className="flex flex-wrap justify-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
+           <div className="flex flex-wrap justify-center items-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
              <button onClick={() => setShowPrivacy(true)} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
              <button onClick={() => setShowTerms(true)} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
              <button onClick={() => setShowContact(true)} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
-             <button onClick={onAdminAccess} className="opacity-0 w-0 h-0 p-0 overflow-hidden">Admin</button>
+             <button 
+               onClick={onAdminAccess} 
+               title="Terminal Hermes" 
+               aria-label="Acceso Hermes"
+               className="text-[#0e1626] hover:text-emerald-500/40 transition-colors p-1 rounded cursor-pointer opacity-70 hover:opacity-100"
+             >
+               <Key className="w-3.5 h-3.5" />
+             </button>
            </div>
         </div>
       </footer>
