@@ -14,62 +14,6 @@ function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Logo SVG esmeralda igual al de la landing (index.html)
-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-7 h-7" aria-hidden="true">
-  <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#34D399"/><stop offset="100%" stop-color="#064E3B"/>
-  </linearGradient></defs>
-  <path d="M50 20 C65 20, 80 35, 80 50 C80 60, 75 70, 65 75 L55 65 C62 60, 65 55, 65 50 C65 42, 58 35, 50 35 L50 20 Z" fill="#10B981"/>
-  <path d="M35 75 C25 70, 20 60, 20 50 C20 35, 35 20, 50 20 L50 35 C42 35, 35 42, 35 50 C35 55, 38 60, 45 65 L35 75 Z" fill="url(#g)"/>
-  <circle cx="50" cy="50" r="6" fill="white"/>
-</svg>`;
-
-const ARTICLE_CSS = `
-  body{font-family:'Inter',system-ui,sans-serif;background:#F8FAFC;color:#0F172A;}
-  .jst-article{max-width:44rem;margin:0 auto;padding:2rem 1.25rem 4rem;line-height:1.75;}
-  .jst-article h1{font-size:2.25rem;line-height:1.2;font-weight:700;color:#0F172A;margin:1.5rem 0 1rem;}
-  .jst-article h2{font-size:1.6rem;line-height:1.3;font-weight:700;color:#064E3B;margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid #E2E8F0;}
-  .jst-article h3{font-size:1.2rem;font-weight:600;color:#0F172A;margin:1.75rem 0 0.75rem;}
-  .jst-article p{margin:0 0 1.1rem;color:#1E293B;}
-  .jst-article ul,.jst-article ol{margin:0 0 1.25rem;padding-left:1.4rem;color:#1E293B;}
-  .jst-article li{margin:0 0 0.5rem;}
-  .jst-article a{color:#059669;text-decoration:underline;}
-  .jst-article blockquote{border-left:4px solid #10B981;background:#ECFDF5;padding:1rem 1.25rem;margin:1.5rem 0;border-radius:0 .5rem .5rem 0;color:#065F46;font-style:italic;}
-  .jst-article img{border-radius:1rem;margin:1.5rem 0;width:100%;height:auto;}
-  .jst-article code{background:#F1F5F9;padding:0.15rem 0.4rem;border-radius:0.35rem;font-size:0.9em;}
-  .jst-article table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:0.95rem;}
-  .jst-article th,.jst-article td{border:1px solid #E2E8F0;padding:0.6rem 0.8rem;text-align:left;}
-  .jst-article th{background:#F1F5F9;color:#064E3B;}
-  .jst-card{max-width:44rem;margin:0 auto;}
-  .jst-cta{margin-top:2.5rem;padding:2rem;background:linear-gradient(135deg,#ECFDF5 0%,#D1FAE5 100%);border:1px solid #A7F3D0;border-radius:1.25rem;text-align:center;box-shadow:0 10px 30px -12px rgba(16,185,129,.35);}
-  .jst-cta .jst-cta-icon{width:2.75rem;height:2.75rem;margin:0 auto 0.75rem;display:flex;align-items:center;justify-content:center;border-radius:9999px;background:#10B981;color:#fff;}
-  .jst-cta h3{color:#064E3B;font-weight:700;font-size:1.25rem;margin:0 0 .4rem;line-height:1.3;}
-  .jst-cta p{color:#065F46;font-size:1rem;margin:0 0 1.1rem;max-width:32rem;margin-left:auto;margin-right:auto;line-height:1.6;}
-  .jst-cta a{display:inline-flex;align-items:center;gap:.5rem;background:#10B981;color:#fff;padding:0.85rem 1.75rem;border-radius:0.85rem;font-weight:600;font-size:1.05rem;text-decoration:none;transition:background .2s,transform .15s;box-shadow:0 6px 16px -6px rgba(16,185,129,.6);}
-  .jst-cta a:hover{background:#059669;transform:translateY(-1px);}
-  .jst-cta a svg{width:1.1rem;height:1.1rem;}
-  .jst-social{max-width:44rem;margin:2.5rem auto 0;padding:1.5rem;border-top:1px solid #E2E8F0;text-align:center;}
-  .jst-social-actions{display:flex;gap:1rem;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:1rem;}
-  .jst-like,.jst-share{display:inline-flex;align-items:center;gap:.45rem;background:#fff;border:1px solid #CBD5E1;color:#059669;padding:.6rem 1.1rem;border-radius:.75rem;font-weight:600;font-size:.95rem;text-decoration:none;cursor:pointer;transition:background .2s,color .2s,border-color .2s;}
-  .jst-like svg,.jst-share svg{width:1.25rem;height:1.25rem;flex-shrink:0;}
-  .jst-like:hover,.jst-share:hover{border-color:#10B981;color:#047857;}
-  .jst-like.is-active{background:#ECFDF5;border-color:#10B981;color:#047857;}
-  .jst-like.is-active svg{fill:#10B981;stroke:#047857;}
-  .jst-social-follow{color:#64748B;font-size:.9rem;margin:0 0 .75rem;}
-  .jst-social-links{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;}
-  .jst-social-links a{color:#059669;font-weight:600;font-size:.9rem;text-decoration:none;}
-  .jst-social-links a:hover{text-decoration:underline;}
-
-  .jst-card-item{display:block;background:#fff;border:1px solid #E2E8F0;border-radius:1rem;overflow:hidden;transition:box-shadow .2s,transform .2s;}
-  .jst-card-item:hover{box-shadow:0 10px 25px -5px rgba(16,185,129,.25);transform:translateY(-2px);}
-  .jst-card-item img{width:100%;height:12rem;object-fit:cover;}
-  .jst-card-item .body{padding:1rem;}
-  .jst-tag{color:#059669;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;}
-  .jst-card-item h2{font-size:1.15rem;font-weight:700;color:#0F172A;margin:.35rem 0 .5rem;}
-  .jst-card-item p{font-size:.9rem;color:#475569;margin:0;}
-  @media (max-width:640px){.jst-article{padding:1.25rem 1rem 3rem;}.jst-article h1{font-size:1.75rem;}}
-`;
-
 function baseLayout(opts: {
   title: string;
   description: string;
@@ -211,27 +155,9 @@ function ctaByArea(area?: string): { title: string; subtitle: string; buttonText
   };
 }
 
-// Mapa fijo de imágenes hero por slug (autónomo, no depende de Supabase).
-// Prioridad en el render: este mapa > featured_image_url de la BD.
-const HERO_IMAGES: Record<string, string> = {
-  "me-despidieron-que-hacer": "https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/me-despidieron-que-hacer.jpg",
-  "no-me-pagan-pension-alimenticia-que-hacer": "/img/blog/no-me-pagan-pension-alimenticia-que-hacer.jpg",
-  "te-presento-a-justino": "/img/blog/te-presento-a-justino.jpg",
-  "te-presento-justino-oportunidad": "/img/blog/te-presento-justino-oportunidad.jpg",
-  "justino-foso-y-vision-replicable": "/img/blog/justino-foso-y-vision-replicable.jpg",
-  "justino-modelo-negocio-retencion": "/img/blog/justino-modelo-negocio-retencion.jpg",
-  "justino-el-mercado-que-casi-nadie-ve": "/img/blog/justino-el-mercado-que-casi-nadie-ve.jpg",
-  "justino-siempre-ahi-cuando-el-caso-se-arrastra": "/img/blog/justino-siempre-ahi-cuando-el-caso-se-arrastra.jpg",
-  "justino-ordena-tu-expediente": "/img/blog/justino-ordena-tu-expediente.jpg",
-  "justino-te-explica-lo-que-no-entendias": "/img/blog/justino-te-explica-lo-que-no-entendias.jpg",
-};
-
 function articleBodyHtml(row: any): string {
-  // Imagen hero: prioriza el mapa fijo por slug (autónomo) sobre featured_image_url de la BD.
-  const heroImg = HERO_IMAGES[row.slug] || row.featured_image_url || "";
-  const heroAlt = row.alt_text || row.h1 || row.title || "Justino";
-  const hero = heroImg
-    ? `<img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heroAlt)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
+  const hero = row.featured_image_url
+    ? `<img src="${escapeHtml(row.featured_image_url)}" alt="${escapeHtml(row.h1 || row.title)}" class="w-full rounded-2xl mb-8 shadow-sm border border-slate-200 object-cover max-h-96" />`
     : "";
   const body = renderMarkdown(cleanBlogMarkdown(row.markdown || ""));
   const areaTag = row.area
@@ -257,25 +183,6 @@ function articleBodyHtml(row: any): string {
     </a>
   </div>`;
 
-  // Bloque fijo de redes sociales (like / compartir / seguir) para TODOS los artículos.
-  // URLs definitivas por confirmar de Edwin; placeholders coherentes con la marca.
-  const SHARE_URL = `${BASE}/blog/${row.slug}`;
-  const socialHtml = `
-  <div class="jst-social" role="region" aria-label="Comparte y sigue a Justino">
-    <div class="jst-social-actions">
-      <button class="jst-like" type="button" aria-pressed="false" onclick="this.classList.toggle('is-active');this.setAttribute('aria-pressed', this.classList.contains('is-active'));">${heartSvg}<span>Me gusta</span></button>
-      <a class="jst-share" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(SHARE_URL)}" target="_blank" rel="noopener">${shareSvg}<span>Compartir</span></a>
-      <a class="jst-share" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(SHARE_URL)}&text=${encodeURIComponent(row.h1 || row.title || 'Justino')}" target="_blank" rel="noopener">${shareSvg}<span>Twittear</span></a>
-    </div>
-    <p class="jst-social-follow">Síguenos y acompaña a más mexicanos:</p>
-    <div class="jst-social-links">
-      <a href="https://www.facebook.com/justino.app" target="_blank" rel="noopener">Facebook</a>
-      <a href="https://www.instagram.com/justino.app" target="_blank" rel="noopener">Instagram</a>
-      <a href="https://www.tiktok.com/@justino.app" target="_blank" rel="noopener">TikTok</a>
-      <a href="https://www.linkedin.com/company/justino" target="_blank" rel="noopener">LinkedIn</a>
-      <a href="https://www.youtube.com/@justino" target="_blank" rel="noopener">YouTube</a>
-    </div>
-  </div>`;
   return `<article class="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-10 shadow-sm">
 ${hero}
 <header class="mb-8 border-b border-slate-100 pb-6">
@@ -285,13 +192,8 @@ ${hero}
 </header>
 <div class="jst-article">${body}</div>
 ${cta}
-${socialHtml}
 </article>`;
 }
-
-// Iconos reutilizables para el bloque social
-const heartSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
-const shareSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 
 function buildJsonLd(row: any): object[] {
   const ld: any[] = [
@@ -356,7 +258,7 @@ export function setupBlogRoutes(app: Express) {
         .map(
           (r: any) => `
         <a href="/blog/${r.slug}" class="jst-card group">
-          ${HERO_IMAGES[r.slug] || r.featured_image_url ? `<div class="aspect-video w-full overflow-hidden bg-slate-100"><img src="${escapeHtml(HERO_IMAGES[r.slug] || r.featured_image_url)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="${escapeHtml(r.h1 || r.title)}" /></div>` : ""}
+          ${r.featured_image_url ? `<div class="aspect-video w-full overflow-hidden bg-slate-100"><img src="${escapeHtml(r.featured_image_url)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="${escapeHtml(r.h1 || r.title)}" /></div>` : ""}
           <div class="p-5 flex flex-col flex-grow">
             ${r.area ? `<span class="inline-block px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full w-fit mb-2">${escapeHtml(r.area)}</span>` : ""}
             <h2 class="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors leading-snug mb-2">${escapeHtml(r.h1 || r.title)}</h2>

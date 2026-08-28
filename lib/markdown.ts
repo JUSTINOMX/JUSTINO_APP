@@ -162,8 +162,7 @@ export function renderMarkdown(md: string): string {
 }
 
 // Quita las secciones editoriales (meta/SEO/prompts/instrucciones/numeración SEJ-01/03)
-// que NO van en el blog. Integra el enfoque SEJ-PITCH (AI Studio) con el
-// filtrado de secciones internas y limpieza de sufijos (H2) de Luisa.
+// que NO van en el blog.
 export function cleanBlogMarkdown(md: string): string {
   if (!md) return "";
 
@@ -175,11 +174,6 @@ export function cleanBlogMarkdown(md: string): string {
     content = content.slice(sec5Match.index);
   }
 
-  // Secciones editoriales INTERNAS que jamás se publican en el cuerpo visible
-  // del blog: vocabulario de producción. El CTA visual lo inyecta blog.ts por
-  // área; el resto es metadata que el lector no debe ver.
-  const INTERNAL_SECTIONS = /^(CTA|FUENTES|ENLACES INTERNOS SUGERIDOS|IMÁGENES SUGERIDAS|PROMPT MAESTRO PARA IMÁGENES|ALT TEXT|PROPUESTA OPEN GRAPH)\b/i;
-
   const lines = content.split("\n");
   const cleanedLines: string[] = [];
 
@@ -190,6 +184,7 @@ export function cleanBlogMarkdown(md: string): string {
     // Eliminar encabezados de ficha / metadata editorial
     if (/^#+\s*(FICHA|METADATA|DATOS EDITORIALES)/i.test(trimmed)) continue;
     if (/CHECKLIST DE APROBACIÓN/i.test(trimmed)) continue;
+
     // Eliminar secciones 16+ (prompts u observaciones)
     if (/^##\s*(1[6-9]|2[0-9])\./i.test(trimmed)) {
       break;
@@ -197,13 +192,6 @@ export function cleanBlogMarkdown(md: string): string {
 
     // Eliminar la numeración SEJ-01/03 en títulos (ej. "## 5. INTRODUCCIÓN" -> "## INTRODUCCIÓN")
     line = line.replace(/^(#{1,6})\s*\d+(\.\d+)*\.\s*/, "$1 ");
-    // Limpiar sufijos editoriales como (H2)/(H1) que quedan en el título
-    line = line.replace(/\s*\(H[1-6]\)\s*$/i, "");
-
-    // Secciones internas editoriales (CTA, FUENTES, ENLACES INTERNOS, etc.):
-    // se filtran tras quitar la numeración y los '#' para que "## 15. CTA" caiga.
-    const titleOnly = line.trim().replace(/^#+\s*/, "").trim();
-    if (INTERNAL_SECTIONS.test(titleOnly)) continue;
 
     // Eliminar instrucciones de copy entre paréntesis (ej. "(80-150 palabras...)", "(150-250 palabras)", etc.)
     line = line.replace(/\(\d+[\s–\-]+\d+\s*palabras[^\)]*\)/gi, "");
