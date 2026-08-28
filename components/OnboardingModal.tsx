@@ -438,10 +438,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                 {isRegistering ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" /> 
-                    Activando tu caso...
+                    <span>Activando tu cuenta y abriendo caso...</span>
                   </>
                 ) : (
-                  "Activar Cuenta y Comenzar con Justino"
+                  <span>Activar Cuenta y Abrir mi Caso con Justino</span>
                 )}
               </button>
             </form>

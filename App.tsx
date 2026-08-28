@@ -44,11 +44,11 @@ function App() {
       params.get('success') || 
       params.get('payment')
     );
-    if (isPaid && !user) {
+    if (isPaid) {
       setView('onboarding');
       setOnboardingStep(2);
     }
-  }, [user]);
+  }, []);
 
   // Helper to ensure user profile & case record in Supabase
   const ensureUserProfileAndCase = async (userId: string, email: string) => {
@@ -86,10 +86,24 @@ function App() {
 
     // Supabase Auth Listener (The Single Source of Truth)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const params = new URLSearchParams(window.location.search);
+      const isPaidPending = Boolean(
+        params.get('session_id') || 
+        params.get('paid') || 
+        params.get('success') || 
+        params.get('payment')
+      );
+
+      // If user just returned from payment, do NOT auto-jump to dashboard: wait for them to submit username/password in onboarding modal
+      if (isPaidPending) {
+        return;
+      }
+
       if (session?.user) {
         const loggedUser: User = {
           id: session.user.id,
-          email: session.user.email || ''
+          email: session.user.email || '',
+          username: (session.user.user_metadata as any)?.username || session.user.email?.split('@')[0] || 'Usuario'
         };
         setUser(loggedUser);
         
@@ -101,7 +115,7 @@ function App() {
         
         if (isAdminSession) {
            setView('admin-dashboard');
-        } else if (view === 'landing' || view === 'onboarding') {
+        } else if (view === 'landing') {
            setView('dashboard');
         }
       } else {
@@ -115,7 +129,7 @@ function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [view]);
 
   // Sincronización de datos del usuario (Cloud First)
   useEffect(() => {
