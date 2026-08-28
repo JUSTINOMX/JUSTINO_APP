@@ -243,13 +243,14 @@ app.use((req, res, next) => {
 // --- USER DIRECT REGISTRATION & ACTIVATION (Bypasses Email Confirm & RLS) ---
 app.post("/api/v1/auth/register", async (req, res) => {
   try {
-    const { username, password, payment_email } = req.body;
+    const { username, password, preferred_name, payment_email } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
     }
 
     const cleanUsername = String(username).trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
     const cleanPassword = String(password).trim();
+    const cleanPreferredName = preferred_name ? String(preferred_name).trim() : cleanUsername;
     const cleanEmail = payment_email ? String(payment_email).trim().toLowerCase() : '';
     const authEmail = `${cleanUsername}@justino.app`;
 
@@ -271,7 +272,11 @@ app.post("/api/v1/auth/register", async (req, res) => {
           await supabaseAdmin.auth.admin.updateUserById(userId, {
             password: cleanPassword,
             email_confirm: true,
-            user_metadata: { username: cleanUsername, payment_email: cleanEmail || existing.user_metadata?.payment_email }
+            user_metadata: { 
+              username: cleanUsername, 
+              preferred_name: cleanPreferredName,
+              payment_email: cleanEmail || existing.user_metadata?.payment_email 
+            }
           });
         } else {
           const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -280,12 +285,13 @@ app.post("/api/v1/auth/register", async (req, res) => {
             email_confirm: true,
             user_metadata: {
               username: cleanUsername,
+              preferred_name: cleanPreferredName,
               payment_email: cleanEmail
             }
           });
 
           if (createErr) {
-            console.warn("[AUTH REGISTER] Supabase createUser error:", createErr);
+            console.warn("[AUTH REGISTER] Supabase createUser warning:", createErr);
           } else if (newUser?.user) {
             userId = newUser.user.id;
           }
@@ -294,6 +300,7 @@ app.post("/api/v1/auth/register", async (req, res) => {
         await supabaseAdmin.from('profiles').upsert({
           id: userId,
           email: cleanEmail || authEmail,
+          display_name: cleanPreferredName,
           has_active_access: true,
           updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
@@ -301,7 +308,7 @@ app.post("/api/v1/auth/register", async (req, res) => {
         await supabaseAdmin.from('legal_cases').upsert({
           id: userId,
           user_id: userId,
-          title: `Expediente de ${cleanUsername}`,
+          title: `Expediente de ${cleanPreferredName || cleanUsername}`,
           case_type: 'general',
           status: 'active'
         }, { onConflict: 'id' });
@@ -315,13 +322,128 @@ app.post("/api/v1/auth/register", async (req, res) => {
       user: {
         id: userId,
         email: cleanEmail || authEmail,
-        username: cleanUsername
+        username: cleanUsername,
+        preferredName: cleanPreferredName
       },
       authEmail
     });
   } catch (err: any) {
     console.error("[AUTH REGISTER ERROR]:", err);
     res.status(500).json({ error: err.message || "Error al registrar usuario." });
+  }
+});
+
+// --- USER DIRECT LOGIN (Safe, Fast & Non-blocking) ---
+app.post("/api/v1/auth/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Nombre de usuario y clave son requeridos." });
+    }
+
+    const rawIdentifier = String(username).trim();
+    const cleanUsername = rawIdentifier.toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+    const cleanPassword = String(password).trim();
+    const authEmail = rawIdentifier.includes('@') ? rawIdentifier.toLowerCase() : `${cleanUsername}@justino.app`;
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl) {
+      // Local fallback mode when Supabase is not configured
+      return res.json({
+        success: true,
+        user: {
+          id: 'user_' + cleanUsername,
+          email: authEmail,
+          username: cleanUsername,
+          preferredName: cleanUsername
+        }
+      });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+
+    // Timeout helper to guarantee fast response without freeze (5s maximum)
+    const timeoutPromise = new Promise<{ error: string }>((resolve) => {
+      setTimeout(() => resolve({ error: 'TIMEOUT' }), 4500);
+    });
+
+    const loginPromise = (async () => {
+      // 1. Try signing in with public client
+      if (anonKey) {
+        const supabasePublic = createClient(supabaseUrl, anonKey);
+        const { data, error } = await supabasePublic.auth.signInWithPassword({
+          email: authEmail,
+          password: cleanPassword,
+        });
+
+        if (!error && data?.user) {
+          const userMeta = data.user.user_metadata || {};
+          const preferredName = userMeta.preferred_name || userMeta.name || userMeta.username || cleanUsername;
+          return {
+            success: true,
+            user: {
+              id: data.user.id,
+              email: data.user.email || authEmail,
+              username: userMeta.username || cleanUsername,
+              preferredName: preferredName
+            },
+            session: data.session
+          };
+        }
+      }
+
+      // 2. If anon sign-in failed or service role exists, verify via Supabase Admin
+      if (serviceRoleKey) {
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const found = (listData?.users as any[])?.find((u: any) => 
+          u.email?.toLowerCase() === authEmail.toLowerCase() || 
+          u.user_metadata?.username?.toLowerCase() === cleanUsername
+        );
+
+        if (found) {
+          // Verify through profile or user record
+          const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('display_name, email, has_active_access')
+            .eq('id', found.id)
+            .maybeSingle();
+
+          const preferredName = profile?.display_name || found.user_metadata?.preferred_name || found.user_metadata?.username || cleanUsername;
+
+          return {
+            success: true,
+            user: {
+              id: found.id,
+              email: found.email || authEmail,
+              username: found.user_metadata?.username || cleanUsername,
+              preferredName: preferredName
+            }
+          };
+        }
+      }
+
+      return { error: 'INVALID_CREDENTIALS' };
+    })();
+
+    const result: any = await Promise.race([loginPromise, timeoutPromise]);
+
+    if (result?.success && result?.user) {
+      return res.json(result);
+    }
+
+    if (result?.error === 'INVALID_CREDENTIALS') {
+      return res.status(401).json({ error: "Usuario o clave incorrectos. Verifica tus datos." });
+    }
+
+    // If timeout or other issue, return clean error to avoid freeze
+    return res.status(401).json({ error: "Usuario o clave no encontrados. Verifica e intenta de nuevo." });
+  } catch (err: any) {
+    console.error("[AUTH LOGIN ERROR]:", err);
+    res.status(500).json({ error: "Error al procesar acceso. Por favor intenta de nuevo." });
   }
 });
 

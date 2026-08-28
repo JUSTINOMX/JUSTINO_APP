@@ -3,6 +3,7 @@ export interface User {
   id: string; // Supabase UUID
   email: string;
   name?: string;
+  preferredName?: string;
   username?: string;
 }
 

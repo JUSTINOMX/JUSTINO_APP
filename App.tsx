@@ -11,11 +11,15 @@ import { supabase } from './services/supabaseClient';
 import { config } from './config';
 import { uploadToVault } from './services/justino-service';
 
-const INITIAL_WELCOME_MESSAGE: Message = {
-  id: 'welcome',
-  text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
-  sender: 'bot',
-  timestamp: new Date(),
+const createInitialWelcomeMessage = (preferredName?: string): Message => {
+  const displayName = preferredName ? preferredName.trim() : '';
+  const greeting = displayName ? `Hola **${displayName}**` : `Hola`;
+  return {
+    id: 'welcome',
+    text: `${greeting}, bienvenido a tu expediente. Soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+    sender: 'bot',
+    timestamp: new Date(),
+  };
 };
 
 function App() {
@@ -32,7 +36,7 @@ function App() {
   const [onboardingStep, setOnboardingStep] = useState<number>(hasPaymentSuccess ? 2 : 1);
   
   const [user, setUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
 
   // Detect payment return or session_id in URL upon mount or state changes
@@ -51,12 +55,13 @@ function App() {
   }, []);
 
   // Helper to ensure user profile & case record in Supabase
-  const ensureUserProfileAndCase = async (userId: string, email: string) => {
+  const ensureUserProfileAndCase = async (userId: string, email: string, preferredName?: string) => {
     if (!supabase) return;
     try {
       await supabase.from('profiles').upsert({
         id: userId,
         email: email,
+        display_name: preferredName || email.split('@')[0],
         has_active_access: true,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
@@ -71,7 +76,7 @@ function App() {
         await supabase.from('legal_cases').insert([{
           id: userId,
           user_id: userId,
-          title: 'Expediente Legal Principal',
+          title: `Expediente de ${preferredName || 'Principal'}`,
           case_type: 'general',
           status: 'active'
         }]);
@@ -100,15 +105,21 @@ function App() {
       }
 
       if (session?.user) {
+        const userMeta = (session.user.user_metadata as any) || {};
+        const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_preferred_name') : '';
+        const preferredName = userMeta.preferred_name || storedPref || userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+        const cleanUsername = userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+
         const loggedUser: User = {
           id: session.user.id,
           email: session.user.email || '',
-          username: (session.user.user_metadata as any)?.username || session.user.email?.split('@')[0] || 'Usuario'
+          username: cleanUsername,
+          preferredName: preferredName
         };
         setUser(loggedUser);
         
         // Auto-provision profile and default case in Supabase
-        await ensureUserProfileAndCase(session.user.id, session.user.email || '');
+        await ensureUserProfileAndCase(session.user.id, session.user.email || '', preferredName);
 
         // Admin detection (Hint from session storage, but backend protects data)
         const isAdminSession = sessionStorage.getItem('justino_admin_active') === 'true';
@@ -146,7 +157,7 @@ function App() {
                 
                 if (msgs && !msgError) {
                     if (msgs.length === 0) {
-                        setMessages([INITIAL_WELCOME_MESSAGE]);
+                        setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
                     } else {
                         const formattedMessages: Message[] = msgs.map(m => ({
                             id: m.id || String(m.created_at),
@@ -156,6 +167,8 @@ function App() {
                         }));
                         setMessages(formattedMessages);
                     }
+                } else if (messages.length <= 1) {
+                    setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
                 }
 
                 const { data: files, error: fileError } = await supabase
@@ -233,7 +246,7 @@ function App() {
       await supabase.auth.signOut();
     }
     setUser(null);
-    setMessages([INITIAL_WELCOME_MESSAGE]);
+    setMessages([createInitialWelcomeMessage()]);
     setVaultFiles([]);
     setView('landing');
   };
