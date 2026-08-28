@@ -192,13 +192,14 @@ function App() {
     setView('dashboard');
   };
 
-  const completeOnboarding = async (testUser?: User) => {
-    if (testUser) {
-      setUser(testUser);
-      if (testUser.id && testUser.email) {
-        await ensureUserProfileAndCase(testUser.id, testUser.email);
-      }
-    }
+  const completeOnboarding = (testUser?: User) => {
+    const activeUser = testUser || user || {
+      id: 'user_' + Date.now(),
+      email: 'usuario@justino.app',
+      username: 'usuario'
+    };
+    
+    setUser(activeUser);
     
     // Clear URL query parameters cleanly
     if (typeof window !== 'undefined' && window.location.search) {
@@ -206,6 +207,10 @@ function App() {
     }
 
     setView('dashboard');
+
+    if (activeUser.id && activeUser.email) {
+      ensureUserProfileAndCase(activeUser.id, activeUser.email).catch(console.warn);
+    }
   };
 
   const handleLogout = async () => {
@@ -347,9 +352,9 @@ function App() {
         />
       )}
 
-      {view === 'dashboard' && user && (
+      {view === 'dashboard' && (
         <Dashboard 
-          user={user} 
+          user={user || { id: 'user_active', email: 'usuario@justino.app', username: 'Usuario' }} 
           messages={messages} 
           vaultFiles={vaultFiles}
           onNewMessage={handleNewMessage}

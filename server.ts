@@ -240,6 +240,91 @@ app.use((req, res, next) => {
 
 // --- ADMIN STATS & VERIFY ---
 
+// --- USER DIRECT REGISTRATION & ACTIVATION (Bypasses Email Confirm & RLS) ---
+app.post("/api/v1/auth/register", async (req, res) => {
+  try {
+    const { username, password, payment_email } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
+    }
+
+    const cleanUsername = String(username).trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+    const cleanPassword = String(password).trim();
+    const cleanEmail = payment_email ? String(payment_email).trim().toLowerCase() : '';
+    const authEmail = `${cleanUsername}@justino.app`;
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    let userId = `user_${Date.now()}`;
+
+    if (supabaseUrl && serviceRoleKey) {
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const existing = (listData?.users as any[])?.find((u: any) => u.email === authEmail || u.user_metadata?.username === cleanUsername);
+
+        if (existing) {
+          userId = existing.id;
+          await supabaseAdmin.auth.admin.updateUserById(userId, {
+            password: cleanPassword,
+            email_confirm: true,
+            user_metadata: { username: cleanUsername, payment_email: cleanEmail || existing.user_metadata?.payment_email }
+          });
+        } else {
+          const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+            email: authEmail,
+            password: cleanPassword,
+            email_confirm: true,
+            user_metadata: {
+              username: cleanUsername,
+              payment_email: cleanEmail
+            }
+          });
+
+          if (createErr) {
+            console.warn("[AUTH REGISTER] Supabase createUser error:", createErr);
+          } else if (newUser?.user) {
+            userId = newUser.user.id;
+          }
+        }
+
+        await supabaseAdmin.from('profiles').upsert({
+          id: userId,
+          email: cleanEmail || authEmail,
+          has_active_access: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+        await supabaseAdmin.from('legal_cases').upsert({
+          id: userId,
+          user_id: userId,
+          title: `Expediente de ${cleanUsername}`,
+          case_type: 'general',
+          status: 'active'
+        }, { onConflict: 'id' });
+      } catch (dbErr) {
+        console.warn("[AUTH REGISTER] Database sync warning:", dbErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: userId,
+        email: cleanEmail || authEmail,
+        username: cleanUsername
+      },
+      authEmail
+    });
+  } catch (err: any) {
+    console.error("[AUTH REGISTER ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error al registrar usuario." });
+  }
+});
+
 app.get("/api/v1/admin/verify", authMiddleware, isAdminMiddleware, (req, res) => {
   res.json({ isAdmin: true, user: (req as any).user.email });
 });

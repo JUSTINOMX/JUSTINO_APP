@@ -38,10 +38,7 @@ function baseLayout(opts: {
 <meta property="og:title" content="${escapeHtml(opts.title)}" />
 <meta property="og:description" content="${escapeHtml(opts.description)}" />
 <meta property="og:url" content="${escapeHtml(opts.canonical)}" />
-${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />
-<meta property="og:image:secure_url" content="${escapeHtml(ogImage)}" />
-<meta property="og:image:width" content="${ogImage.toLowerCase().endsWith(".jpg") || ogImage.toLowerCase().endsWith(".jpeg") ? 1376 : 1152}" />
-<meta property="og:image:height" content="${ogImage.toLowerCase().endsWith(".jpg") || ogImage.toLowerCase().endsWith(".jpeg") ? 768 : 2048}" />` : ""}
+${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />` : ""}
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${escapeHtml(opts.title)}" />
 <meta name="twitter:description" content="${escapeHtml(opts.description)}" />
