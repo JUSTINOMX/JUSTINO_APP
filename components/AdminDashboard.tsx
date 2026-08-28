@@ -3,7 +3,8 @@ import {
   DollarSign, Users, CheckCircle2, XCircle, FileText, Activity, 
   RefreshCw, LogOut, Search, Filter, ArrowUpRight, ShieldCheck, 
   ExternalLink, Sparkles, Terminal, Database, CreditCard, Cpu, 
-  Clock, AlertTriangle, Layers, ChevronRight, Zap
+  Clock, AlertTriangle, Layers, ChevronRight, Zap, Tag, Gift,
+  Store, Building2, HelpCircle
 } from 'lucide-react';
 import { Logo } from './Logo';
 
@@ -15,9 +16,18 @@ interface SaleItem {
   id: string;
   customer_email: string;
   customer_name: string;
+  amount_subtotal?: number;
+  amount_discount?: number;
+  amount_paid?: number;
   amount_total: number;
   currency: string;
   payment_status: string;
+  payment_method_type?: 'card' | 'oxxo' | 'spei' | 'coupon_100' | string;
+  payment_method_label?: string;
+  coupon_code?: string | null;
+  is_real_revenue?: boolean;
+  is_completed?: boolean;
+  stripe_status?: string;
   created_at: string;
   source?: string;
 }
@@ -37,8 +47,19 @@ interface AccountItem {
 
 interface HermesOverviewData {
   kpis: {
+    totalRealRevenue: number;
+    totalRealSalesCount: number;
+    totalCouponSalesCount: number;
+    totalGrossOrders: number;
+    totalDiscountsGiven: number;
     totalRevenue: number;
     totalSalesCount: number;
+    paymentMethodsBreakdown: {
+      card: number;
+      oxxo: number;
+      spei: number;
+      coupon_100: number;
+    };
     totalAccounts: number;
     activeCases: number;
     closedCases: number;
@@ -60,10 +81,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [salesFilter, setSalesFilter] = useState<'completed' | 'all' | 'real_only' | 'coupons_only' | 'unpaid' | 'card' | 'oxxo'>('completed');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const [togglingCaseId, setTogglingCaseId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [liveLogs, setLiveLogs] = useState<Array<{ id: string; time: string; text: string; type: 'sale' | 'user' | 'case' | 'ai' }>>([]);
+  const [liveLogs, setLiveLogs] = useState<Array<{ id: string; time: string; text: string; type: 'sale' | 'user' | 'case' | 'ai' | 'system' }>>([]);
 
   // Live Cyber Clock
   useEffect(() => {
@@ -98,11 +120,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
       // Seed initial cyber logs if empty
       if (liveLogs.length === 0) {
+        const realCount = json.kpis.totalRealSalesCount || 0;
+        const couponCount = json.kpis.totalCouponSalesCount || 0;
+        const realRev = json.kpis.totalRealRevenue || 0;
+
         const initialLogs = [
-          { id: '1', time: new Date().toLocaleTimeString(), text: 'Matriz Hermes sincronizada con Supabase Cloud', type: 'system' as any },
-          { id: '2', time: new Date().toLocaleTimeString(), text: `Registros detectados: ${json.kpis.totalAccounts} cuentas / ${json.kpis.totalSalesCount} órdenes`, type: 'user' as any },
-          { id: '3', time: new Date().toLocaleTimeString(), text: `Ventas brutas acumuladas: $${json.kpis.totalRevenue.toLocaleString()} MXN`, type: 'sale' as any },
-          { id: '4', time: new Date().toLocaleTimeString(), text: `Casos activos en Justino: ${json.kpis.activeCases} | Cerrados: ${json.kpis.closedCases}`, type: 'case' as any }
+          { id: '1', time: new Date().toLocaleTimeString(), text: 'Matriz Hermes sincronizada con Supabase Cloud & Stripe API', type: 'system' as const },
+          { id: '2', time: new Date().toLocaleTimeString(), text: `Auditoría financiera: $${realRev.toLocaleString()} MXN ingresos reales (${realCount} pagados, ${couponCount} cupones 100%)`, type: 'sale' as const },
+          { id: '3', time: new Date().toLocaleTimeString(), text: `Base de usuarios: ${json.kpis.totalAccounts} cuentas registradas en Supabase`, type: 'user' as const },
+          { id: '4', time: new Date().toLocaleTimeString(), text: `Monitor de casos: ${json.kpis.activeCases} expedientes activos | ${json.kpis.closedCases} cerrados`, type: 'case' as const }
         ];
         setLiveLogs(initialLogs);
       }
@@ -189,6 +215,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
+  // Filtered Sales
+  const filteredSales = useMemo(() => {
+    if (!data?.sales) return [];
+    return data.sales.filter(sale => {
+      const matchesSearch = 
+        sale.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sale.customer_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sale.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (sale.coupon_code && sale.coupon_code.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const isPaid = sale.payment_status === 'paid' && Boolean(sale.is_real_revenue);
+      const isCoupon = (sale.payment_status === 'no_payment_required' || sale.payment_method_type === 'coupon_100') && !sale.is_real_revenue;
+      const isUnpaid = !isPaid && !isCoupon;
+
+      let matchesType = true;
+      if (salesFilter === 'completed') {
+        matchesType = isPaid || isCoupon;
+      } else if (salesFilter === 'real_only') {
+        matchesType = isPaid && Number(sale.amount_paid || sale.amount_total) > 0;
+      } else if (salesFilter === 'coupons_only') {
+        matchesType = isCoupon;
+      } else if (salesFilter === 'unpaid') {
+        matchesType = isUnpaid;
+      } else if (salesFilter === 'card') {
+        matchesType = sale.payment_method_type === 'card' && isPaid;
+      } else if (salesFilter === 'oxxo') {
+        matchesType = sale.payment_method_type === 'oxxo' && isPaid;
+      } else if (salesFilter === 'all') {
+        matchesType = true;
+      }
+
+      return matchesSearch && matchesType;
+    });
+  }, [data?.sales, searchQuery, salesFilter]);
+
   // Filtered Accounts
   const filteredAccounts = useMemo(() => {
     if (!data?.accounts) return [];
@@ -210,8 +271,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   // KPIs
   const kpis = data?.kpis || {
+    totalRealRevenue: 0,
+    totalRealSalesCount: 0,
+    totalCouponSalesCount: 0,
+    totalGrossOrders: 0,
+    totalDiscountsGiven: 0,
     totalRevenue: 0,
     totalSalesCount: 0,
+    paymentMethodsBreakdown: { card: 0, oxxo: 0, spei: 0, coupon_100: 0 },
     totalAccounts: 0,
     activeCases: 0,
     closedCases: 0,
@@ -236,15 +303,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm tracking-wider text-white uppercase">HERMES CYBER-CONSOLE</span>
+                <span className="font-black text-sm tracking-wider text-white uppercase">Panel de Control JUSTINO</span>
                 <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
-                  GOD MODE
+                  ADMIN
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                <span>OPERADOR: HERMES TRISMEGISTO</span>
-                <span className="text-slate-600">&bull;</span>
                 <span className="text-cyan-400">{currentTime}</span>
               </p>
             </div>
@@ -277,7 +342,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </button>
 
           <button 
-            onClick={onLogout}
+            onClick={() => {
+              sessionStorage.removeItem('justino_admin_active');
+              sessionStorage.removeItem('hermes_admin_token');
+              sessionStorage.removeItem('hermes_operator');
+              sessionStorage.clear();
+              onLogout();
+            }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-950/30 hover:bg-red-900/50 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
             title="Cerrar sesión administrativa"
           >
@@ -292,101 +363,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       {/* MAIN CYBER CONTAINER */}
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 relative z-10">
         
-        {/* KPI CARDS HUD (CYBERPUNK GLOW) */}
+        {/* KPI CARDS HUD (FINANCIAL AUDIT & REAL REVENUE CLARITY) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           
-          {/* KPI 1: VENTAS TOTALES */}
-          <div className="bg-[#070E22]/90 border border-emerald-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.05)]">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>VENTAS STRIPE</span>
-              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+          {/* KPI 1: INGRESOS REALES COBRADOS */}
+          <div className="bg-[#070E22]/95 border-2 border-emerald-500/50 p-4 rounded-xl relative overflow-hidden group hover:border-emerald-400 transition-all shadow-[0_0_25px_rgba(16,185,129,0.15)] col-span-2 sm:col-span-1 lg:col-span-2">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex items-center justify-between text-emerald-400 text-[10px] uppercase font-bold tracking-wider mb-1">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                INGRESOS REALES (BANCO)
+              </span>
+              <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[9px]">
+                NETO
+              </span>
             </div>
-            <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              ${kpis.totalRevenue.toLocaleString()} <span className="text-xs text-emerald-400 font-normal">MXN</span>
+            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              ${kpis.totalRealRevenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })} <span className="text-xs text-emerald-400 font-normal">MXN</span>
             </div>
-            <div className="text-[10px] text-emerald-400/80 mt-1 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              {kpis.totalSalesCount} transacciones
+            <div className="text-[11px] text-emerald-300/90 mt-2 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+              <span><strong>{kpis.totalRealSalesCount}</strong> pagos reales en Stripe</span>
             </div>
           </div>
 
-          {/* KPI 2: CUENTAS REGISTRADAS */}
+          {/* KPI 2: CUPONES 100% / PRUEBAS */}
+          <div className="bg-[#070E22]/90 border border-purple-500/40 p-4 rounded-xl relative overflow-hidden group hover:border-purple-400 transition-all shadow-[0_0_20px_rgba(168,85,247,0.08)] col-span-2 sm:col-span-1 lg:col-span-2">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
+            <div className="flex items-center justify-between text-purple-300 text-[10px] uppercase font-bold tracking-wider mb-1">
+              <span className="flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5" />
+                CUPONES 100% / PRUEBAS
+              </span>
+              <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[9px]">
+                PROMO
+              </span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-purple-200 tracking-tight">
+              {kpis.totalCouponSalesCount} <span className="text-xs text-purple-400 font-normal">cupones</span>
+            </div>
+            <div className="text-[11px] text-purple-400/90 mt-2 flex items-center gap-1">
+              <Tag className="w-3 h-3 text-purple-400" />
+              <span>-${kpis.totalDiscountsGiven.toLocaleString()} MXN en descuentos</span>
+            </div>
+          </div>
+
+          {/* KPI 3: TOTAL CUENTAS REGISTRADAS */}
           <div className="bg-[#070E22]/90 border border-cyan-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.05)]">
             <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>TOTAL CUENTAS</span>
+              <span>CUENTAS</span>
               <Users className="w-3.5 h-3.5 text-cyan-400" />
             </div>
             <div className="text-xl sm:text-2xl font-black text-white tracking-tight">
               {kpis.totalAccounts}
             </div>
             <div className="text-[10px] text-cyan-400/80 mt-1">
-              En base de datos
+              En base Supabase
             </div>
           </div>
 
-          {/* KPI 3: CASOS ACTIVOS */}
+          {/* KPI 4: CASOS ACTIVOS / CERRADOS */}
           <div className="bg-[#070E22]/90 border border-teal-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-teal-400 transition-all shadow-[0_0_20px_rgba(20,184,166,0.05)]">
             <div className="absolute top-0 right-0 w-16 h-16 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>CASOS ACTIVOS</span>
+              <span>EXPEDIENTES</span>
               <Activity className="w-3.5 h-3.5 text-teal-400" />
             </div>
-            <div className="text-xl sm:text-2xl font-black text-teal-300 tracking-tight">
-              {kpis.activeCases}
+            <div className="text-xl sm:text-2xl font-black text-teal-300 tracking-tight flex items-baseline gap-1.5">
+              <span>{kpis.activeCases}</span>
+              <span className="text-xs text-amber-400 font-normal">/ {kpis.closedCases} cerr.</span>
             </div>
             <div className="text-[10px] text-teal-400/80 mt-1 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block animate-pulse" />
-              En proceso
+              {kpis.activeCases} en proceso
             </div>
           </div>
 
-          {/* KPI 4: CASOS CERRADOS */}
-          <div className="bg-[#070E22]/90 border border-amber-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.05)]">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>CASOS CERRADOS</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <div className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight">
-              {kpis.closedCases}
-            </div>
-            <div className="text-[10px] text-amber-400/80 mt-1">
-              Concluidos / Archivados
-            </div>
-          </div>
+        </div>
 
-          {/* KPI 5: DOCUMENTOS EN BÓVEDA */}
-          <div className="bg-[#070E22]/90 border border-purple-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-purple-400 transition-all shadow-[0_0_20px_rgba(168,85,247,0.05)]">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>BÓVEDA DOCS</span>
-              <FileText className="w-3.5 h-3.5 text-purple-400" />
-            </div>
-            <div className="text-xl sm:text-2xl font-black text-purple-300 tracking-tight">
-              {kpis.totalVaultDocuments}
-            </div>
-            <div className="text-[10px] text-purple-400/80 mt-1">
-              Generados / Subidos
-            </div>
+        {/* PAYMENT METHODS QUICK HUD BADGES */}
+        <div className="bg-[#050A18]/80 border border-white/10 rounded-xl p-3 sm:px-5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-400">
+            <Layers className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold uppercase text-[11px] text-white">DESGLOSE DE MÉTODOS:</span>
           </div>
-
-          {/* KPI 6: INTERACCIONES IA */}
-          <div className="bg-[#070E22]/90 border border-blue-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-blue-400 transition-all shadow-[0_0_20px_rgba(59,130,246,0.05)]">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
-              <span>CONSULTAS IA</span>
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
-            </div>
-            <div className="text-xl sm:text-2xl font-black text-blue-300 tracking-tight">
-              {kpis.totalInteractions}
-            </div>
-            <div className="text-[10px] text-blue-400/80 mt-1">
-              Mensajes procesados
-            </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] flex items-center gap-1.5 font-bold">
+              <CreditCard className="w-3 h-3" />
+              Tarjeta (Cobro real): {kpis.paymentMethodsBreakdown?.card || 0}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] flex items-center gap-1.5 font-bold">
+              <Store className="w-3 h-3" />
+              OXXO Pay: {kpis.paymentMethodsBreakdown?.oxxo || 0}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[11px] flex items-center gap-1.5 font-bold">
+              <Zap className="w-3 h-3" />
+              SPEI: {kpis.paymentMethodsBreakdown?.spei || 0}
+            </span>
+            <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[11px] flex items-center gap-1.5 font-bold">
+              <Gift className="w-3 h-3" />
+              Cupón 100% Descuento: {kpis.paymentMethodsBreakdown?.coupon_100 || kpis.totalCouponSalesCount}
+            </span>
           </div>
-
         </div>
 
         {/* NAVIGATION TABS (CYBERPUNK CONSOLE SWITCHER) */}
@@ -402,7 +482,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               }`}
             >
               <CreditCard className="w-4 h-4" />
-              <span>[01] Ventas Stripe ({data?.sales.length || 0})</span>
+              <span>[01] Ventas & Auditoría ({data?.sales.length || 0})</span>
             </button>
 
             <button
@@ -443,94 +523,275 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         </div>
 
-        {/* TAB CONTENT 1: VENTAS STRIPE */}
+        {/* TAB CONTENT 1: VENTAS & AUDITORÍA FINANCIERA */}
         {activeTab === 'sales' && (
           <div className="space-y-6 animate-in fade-in duration-200">
             
-            {/* SALES SUMMARY HUD */}
-            <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            {/* SALES FILTER & SEARCH BAR */}
+            <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+              
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-white uppercase flex items-center gap-2">
                     <DollarSign className="w-5 h-5 text-emerald-400" />
-                    Registro de Ventas en Stripe ($400 MXN)
+                    Auditoría de Ventas &amp; Métodos de Pago
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Transacciones auditadas en tiempo real a través de Stripe Checkout & Webhooks
+                    Diferenciación exacta entre dinero real cobrado ($400 MXN) y registros promocionales / cupones 100%
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="px-3 py-1.5 bg-emerald-950/60 border border-emerald-500/40 rounded-lg text-xs text-emerald-300 font-bold">
-                    Precio por Caso: $400.00 MXN
-                  </div>
+                {/* FILTER PILLS */}
+                <div className="flex flex-wrap items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 text-xs">
+                  <button
+                    onClick={() => setSalesFilter('completed')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      salesFilter === 'completed'
+                        ? 'bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    VENTAS CONCLUIDAS ({kpis.totalRealSalesCount + kpis.totalCouponSalesCount})
+                  </button>
+                  <button
+                    onClick={() => setSalesFilter('real_only')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      salesFilter === 'real_only'
+                        ? 'bg-emerald-400 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                        : 'text-emerald-400 hover:text-emerald-300'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    PAGOS REALES ({kpis.totalRealSalesCount})
+                  </button>
+                  <button
+                    onClick={() => setSalesFilter('coupons_only')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      salesFilter === 'coupons_only'
+                        ? 'bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                        : 'text-purple-300 hover:text-purple-200'
+                    }`}
+                  >
+                    <Gift className="w-3 h-3" />
+                    CUPONES 100% ({kpis.totalCouponSalesCount})
+                  </button>
+                  <button
+                    onClick={() => setSalesFilter('unpaid')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      salesFilter === 'unpaid'
+                        ? 'bg-amber-500/80 text-black'
+                        : 'text-amber-400/80 hover:text-amber-300'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    SIN PAGAR ({Math.max(0, (data?.sales.length || 0) - (kpis.totalRealSalesCount + kpis.totalCouponSalesCount))})
+                  </button>
+                  <button
+                    onClick={() => setSalesFilter('all')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      salesFilter === 'all'
+                        ? 'bg-white/20 text-white'
+                        : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    TODOS ({data?.sales.length || 0})
+                  </button>
                 </div>
               </div>
 
-              {/* SALES TABLE */}
+              {/* SEARCH INPUT */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-500 absolute left-4 top-3.5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar transacción por correo, nombre de cliente o código de cupón..."
+                  className="w-full bg-black/80 border border-white/10 focus:border-emerald-400 rounded-xl py-3 pl-11 pr-4 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-all font-mono"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3.5 top-3 text-xs text-slate-500 hover:text-white"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+
+            </div>
+
+            {/* SALES TABLE WITH PAYMENT METHOD CLASSIFICATION */}
+            <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="text-slate-400 border-b border-emerald-500/20 bg-black/40">
-                      <th className="py-3 px-4 uppercase font-bold">ID Transacción / Sesión</th>
+                      <th className="py-3 px-4 uppercase font-bold">ID Transacción</th>
                       <th className="py-3 px-4 uppercase font-bold">Cliente</th>
+                      <th className="py-3 px-4 uppercase font-bold">Método / Tipo</th>
                       <th className="py-3 px-4 uppercase font-bold">Fecha / Hora</th>
                       <th className="py-3 px-4 uppercase font-bold">Estado</th>
-                      <th className="py-3 px-4 uppercase font-bold text-right">Monto</th>
+                      <th className="py-3 px-4 uppercase font-bold text-right">Cobro Real</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-500 font-mono">
+                        <td colSpan={6} className="py-12 text-center text-slate-500 font-mono">
                           <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
-                          DESENCRIPTANDO TRANSACCIONES STRIPE...
+                          AUDITANDO TRANSACCIONES EN STRIPE Y SUPABASE...
                         </td>
                       </tr>
-                    ) : (data?.sales.length || 0) === 0 ? (
+                    ) : filteredSales.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-500">
+                        <td colSpan={6} className="py-12 text-center text-slate-500">
                           <div className="max-w-xs mx-auto space-y-2">
                             <CreditCard className="w-8 h-8 mx-auto text-slate-600" />
-                            <p className="text-sm font-bold text-slate-400">Sin ventas registradas aún</p>
+                            <p className="text-sm font-bold text-slate-400">Sin transacciones coincidentes</p>
                             <p className="text-xs text-slate-600">
-                              Las órdenes aparecerán automáticamente al completarse pagos en Stripe.
+                              No hay registros que coincidan con el filtro seleccionado.
                             </p>
                           </div>
                         </td>
                       </tr>
                     ) : (
-                      data?.sales.map((sale, idx) => (
-                        <tr key={sale.id || idx} className="hover:bg-emerald-950/10 transition-colors group">
-                          <td className="py-3.5 px-4 font-mono text-emerald-400">
-                            <span className="truncate block max-w-[180px]" title={sale.id}>
-                              {sale.id}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <div className="font-bold text-white">{sale.customer_name || 'Usuario Justino'}</div>
-                            <div className="text-slate-400 text-[11px]">{sale.customer_email}</div>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-400 whitespace-nowrap">
-                            {new Date(sale.created_at).toLocaleString('es-MX', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-max">
-                              <CheckCircle2 className="w-3 h-3" />
-                              PAGADO
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right font-bold text-white text-sm">
-                            ${Number(sale.amount_total).toLocaleString('es-MX', { minimumFractionDigits: 2 })} {sale.currency}
-                          </td>
-                        </tr>
-                      ))
+                      filteredSales.map((sale, idx) => {
+                        const isPaid = sale.payment_status === 'paid' && Boolean(sale.is_real_revenue);
+                        const isCoupon = (sale.payment_status === 'no_payment_required' || sale.payment_method_type === 'coupon_100') && !sale.is_real_revenue;
+                        const isUnpaid = !isPaid && !isCoupon;
+                        const isOxxo = sale.payment_method_type === 'oxxo';
+                        const isSpei = sale.payment_method_type === 'spei';
+
+                        return (
+                          <tr key={sale.id || idx} className="hover:bg-emerald-950/10 transition-colors group">
+                            
+                            {/* ID */}
+                            <td className="py-3.5 px-4 font-mono text-slate-400">
+                              <span className="truncate block max-w-[160px] group-hover:text-emerald-400 transition-colors" title={sale.id}>
+                                {sale.id}
+                              </span>
+                              <span className="text-[9px] text-slate-600">
+                                {sale.source === 'stripe_api' ? '⚡ Stripe API Live' : '🗄️ Supabase Orders'}
+                              </span>
+                            </td>
+
+                            {/* CLIENT */}
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-white">{sale.customer_name || 'Usuario Justino'}</div>
+                              <div className="text-slate-400 text-[11px] font-mono">{sale.customer_email}</div>
+                            </td>
+
+                            {/* PAYMENT METHOD BADGE */}
+                            <td className="py-3.5 px-4">
+                              {isCoupon ? (
+                                <div className="space-y-1">
+                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 w-max">
+                                    <Gift className="w-3 h-3 text-purple-400" />
+                                    Cupón 100% Descuento
+                                  </span>
+                                  {sale.coupon_code && (
+                                    <span className="text-[9px] text-purple-400/80 font-mono block pl-1">
+                                      Código: {sale.coupon_code}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : isOxxo ? (
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 w-max ${
+                                  isPaid 
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
+                                    : 'bg-amber-950/30 text-amber-500/80 border-amber-700/30'
+                                }`}>
+                                  <Store className="w-3 h-3 text-amber-400" />
+                                  OXXO Pay {isUnpaid ? '(Voucher Pendiente)' : ''}
+                                </span>
+                              ) : isSpei ? (
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 w-max ${
+                                  isPaid 
+                                    ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' 
+                                    : 'bg-cyan-950/30 text-cyan-500/80 border-cyan-700/30'
+                                }`}>
+                                  <Zap className="w-3 h-3 text-cyan-400" />
+                                  SPEI Transferencia {isUnpaid ? '(Pendiente)' : ''}
+                                </span>
+                              ) : (
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1.5 w-max ${
+                                  isPaid 
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
+                                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                                }`}>
+                                  <CreditCard className="w-3 h-3 text-emerald-400" />
+                                  Tarjeta de Crédito / Débito {isUnpaid ? '(Intento no pagado)' : ''}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* DATE */}
+                            <td className="py-3.5 px-4 text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                              {new Date(sale.created_at).toLocaleString('es-MX', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </td>
+
+                            {/* STATUS */}
+                            <td className="py-3.5 px-4">
+                              {isPaid ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-max">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  PAGO CONFIRMADO
+                                </span>
+                              ) : isCoupon ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1 w-max">
+                                  <Tag className="w-2.5 h-2.5 text-purple-400" />
+                                  PROMOCIONAL
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/40 text-amber-400/90 border border-amber-500/30 flex items-center gap-1 w-max">
+                                  <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                                  {sale.payment_status === 'expired' ? 'VENCIDO / SIN PAGAR' : 'SIN LIQUIDAR'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* REAL REVENUE AMOUNT */}
+                            <td className="py-3.5 px-4 text-right">
+                              {isPaid ? (
+                                <div>
+                                  <span className="font-black text-emerald-400 text-sm shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+                                    +${Number(sale.amount_paid || sale.amount_total || 400).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                                  </span>
+                                  <div className="text-[9px] text-emerald-300/70">
+                                    Ingreso Real
+                                  </div>
+                                </div>
+                              ) : isCoupon ? (
+                                <div>
+                                  <span className="font-bold text-slate-400 text-sm">
+                                    $0.00 MXN
+                                  </span>
+                                  <div className="text-[10px] text-purple-400 line-through">
+                                    $400.00 MXN
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="font-bold text-slate-500 text-sm">
+                                    $0.00 MXN
+                                  </span>
+                                  <div className="text-[9px] text-amber-500/70">
+                                    No Cobrado
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -659,7 +920,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                 <span>{account.displayName}</span>
                                 {account.hasActiveAccess && (
                                   <span className="px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
-                                    PAGO OK
+                                    ACCESO ACTIVO
                                   </span>
                                 )}
                               </div>
@@ -754,7 +1015,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     log.type === 'case' ? 'text-amber-400' :
                     log.type === 'user' ? 'text-cyan-400' : 'text-purple-400'
                   }`}>
-                    {log.type === 'sale' ? '[STRIPE_SALE]' :
+                    {log.type === 'sale' ? '[STRIPE_FINANCIAL]' :
                      log.type === 'case' ? '[CASE_EVENT]' :
                      log.type === 'user' ? '[AUTH_USER]' : '[SYSTEM_LOG]'}
                   </span>

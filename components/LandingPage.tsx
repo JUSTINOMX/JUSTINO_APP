@@ -280,17 +280,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
              <span className="text-xs text-slate-600 font-bold">© 2025 Todos los derechos reservados</span>
            </div>
            
-           <div className="flex flex-wrap justify-center items-center gap-10 text-xs font-black uppercase tracking-widest text-slate-500">
+           <div className="flex flex-wrap justify-center items-center gap-8 text-xs font-black uppercase tracking-widest text-slate-500">
              <button onClick={() => setShowPrivacy(true)} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
              <button onClick={() => setShowTerms(true)} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
              <button onClick={() => setShowContact(true)} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
+             
+             {/* Ícono de Llave Discreto / Camuflajeado */}
              <button 
+               id="hermes-access-trigger"
                onClick={onAdminAccess} 
                title="Terminal Hermes" 
                aria-label="Acceso Hermes"
-               className="text-[#0e1626] hover:text-emerald-500/40 transition-colors p-1 rounded cursor-pointer opacity-70 hover:opacity-100"
+               className="text-slate-700/80 hover:text-emerald-400 p-1.5 rounded-lg transition-all duration-300 cursor-pointer flex items-center justify-center hover:bg-emerald-500/10"
              >
-               <Key className="w-3.5 h-3.5" />
+               <Key className="w-4 h-4" />
              </button>
            </div>
         </div>

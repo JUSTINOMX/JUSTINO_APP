@@ -195,7 +195,20 @@ app.post("/api/v1/webhooks/stripe", express.raw({ type: 'application/json' }), a
           }
         }
 
-        // 3. Insertar orden auditada en public.orders
+        // 3. Insertar orden auditada en public.orders con desglose financiero
+        const subtotalInPesos = session.amount_subtotal ? session.amount_subtotal / 100 : 400;
+        const totalInPesos = session.amount_total !== undefined && session.amount_total !== null ? session.amount_total / 100 : 0;
+        const discountInPesos = session.total_details?.amount_discount ? session.total_details.amount_discount / 100 : (totalInPesos === 0 ? 400 : 0);
+        const isCoupon100 = totalInPesos === 0 || session.payment_status === 'no_payment_required' || discountInPesos >= subtotalInPesos;
+        const isRealRevenue = !isCoupon100 && totalInPesos > 0;
+        const couponCode = session.total_details?.breakdown?.discounts?.[0]?.discount?.coupon?.id || session.discounts?.[0]?.coupon?.id || null;
+
+        let paymentMethodType = isCoupon100 ? 'coupon_100' : 'card';
+        if (!isCoupon100) {
+          if (session.payment_method_types?.includes('oxxo')) paymentMethodType = 'oxxo';
+          else if (session.payment_method_types?.includes('customer_balance')) paymentMethodType = 'spei';
+        }
+
         const { error: orderError } = await supabaseAdmin
           .from('orders')
           .insert([{
@@ -204,16 +217,22 @@ app.post("/api/v1/webhooks/stripe", express.raw({ type: 'application/json' }), a
             stripe_payment_intent_id: session.payment_intent ? String(session.payment_intent) : null,
             stripe_product_id: 'prod_Tc8CPnxlKG0Yrm',
             customer_email: email,
-            amount_total: session.amount_total || 40000,
-            currency: session.currency || 'mxn',
-            payment_status: session.payment_status || 'paid',
-            coupon_applied: session.total_details?.breakdown?.discounts?.[0]?.discount?.coupon?.id || null
+            customer_name: session.customer_details?.name || email.split('@')[0],
+            amount_subtotal: subtotalInPesos,
+            amount_discount: discountInPesos,
+            amount_paid: isRealRevenue ? totalInPesos : 0,
+            amount_total: totalInPesos,
+            currency: (session.currency || 'mxn').toUpperCase(),
+            payment_status: session.payment_status || (isCoupon100 ? 'no_payment_required' : 'paid'),
+            payment_method_type: paymentMethodType,
+            coupon_applied: couponCode,
+            is_real_revenue: isRealRevenue
           }]);
 
         if (orderError) {
           console.error("[STRIPE WEBHOOK] Error al registrar orden en public.orders:", orderError);
         } else {
-          console.log(`[STRIPE WEBHOOK] Orden registrada en public.orders para ${email}`);
+          console.log(`[STRIPE WEBHOOK] Orden auditada en public.orders para ${email} (Real: ${isRealRevenue ? `$${totalInPesos}` : 'CUPÓN 100%'})`);
         }
       } else {
         console.warn("[STRIPE WEBHOOK] Variables SUPABASE_SERVICE_ROLE_KEY no configuradas en el servidor.");
@@ -554,17 +573,75 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
         const Stripe = (await import("stripe")).default;
         const stripe = new Stripe(stripeKey);
 
-        const sessions = await stripe.checkout.sessions.list({ limit: 50 });
-        stripeLiveSales = (sessions.data || []).map(s => ({
-          id: s.id,
-          customer_email: s.customer_details?.email || s.customer_email || 'Cliente Stripe',
-          customer_name: s.customer_details?.name || 'Usuario',
-          amount_total: s.amount_total ? s.amount_total / 100 : 400,
-          currency: (s.currency || 'mxn').toUpperCase(),
-          payment_status: s.payment_status || 'paid',
-          created_at: new Date(s.created * 1000).toISOString(),
-          source: 'stripe_api'
-        }));
+        const sessions = await stripe.checkout.sessions.list({ 
+          limit: 100
+        });
+
+        stripeLiveSales = (sessions.data || []).map(s => {
+          const subtotal = s.amount_subtotal ? s.amount_subtotal / 100 : 400;
+          const rawTotal = (s.amount_total !== undefined && s.amount_total !== null) ? s.amount_total / 100 : 0;
+          const discount = s.total_details?.amount_discount ? s.total_details.amount_discount / 100 : (rawTotal === 0 ? 400 : 0);
+          
+          // Strict Stripe Status Evaluation
+          const isPaid = s.payment_status === 'paid';
+          const isCoupon100 = s.payment_status === 'no_payment_required' || (s.status === 'complete' && rawTotal === 0) || discount >= subtotal;
+          const isUnpaid = !isPaid && !isCoupon100;
+          const isRealRevenue = isPaid && rawTotal > 0;
+          const actualPaid = isRealRevenue ? rawTotal : 0;
+
+          let methodType: 'card' | 'oxxo' | 'spei' | 'coupon_100' = isCoupon100 ? 'coupon_100' : 'card';
+          let methodLabel = isCoupon100 ? 'Cupón 100% Descuento' : 'Tarjeta';
+
+          if (isCoupon100) {
+            methodType = 'coupon_100';
+            methodLabel = 'Cupón 100%';
+          } else if (s.payment_method_types?.includes('oxxo')) {
+            methodType = 'oxxo';
+            methodLabel = 'OXXO Pay';
+          } else if (s.payment_method_types?.includes('customer_balance')) {
+            methodType = 'spei';
+            methodLabel = 'Transferencia SPEI';
+          } else {
+            methodType = 'card';
+            methodLabel = 'Tarjeta Crédito/Débito';
+          }
+
+          const anySession = s as any;
+          const couponCode = anySession.total_details?.breakdown?.discounts?.[0]?.discount?.coupon?.id || 
+            (typeof anySession.discounts?.[0]?.coupon === 'object' ? anySession.discounts?.[0]?.coupon?.id : anySession.discounts?.[0]?.coupon) || 
+            (isCoupon100 ? '100% OFF' : null);
+
+          let paymentStatus: string = s.payment_status || 'unpaid';
+          if (isPaid) {
+            paymentStatus = 'paid';
+          } else if (isCoupon100) {
+            paymentStatus = 'no_payment_required';
+          } else if (s.status === 'expired') {
+            paymentStatus = 'expired';
+          } else if (s.status === 'open') {
+            paymentStatus = 'unpaid_open';
+          }
+
+          return {
+            id: s.id,
+            customer_email: s.customer_details?.email || s.customer_email || 'Cliente Stripe',
+            customer_name: s.customer_details?.name || (s.customer_details?.email ? s.customer_details.email.split('@')[0] : 'Usuario Justino'),
+            amount_subtotal: subtotal,
+            amount_discount: discount,
+            amount_paid: actualPaid,
+            amount_total: actualPaid,
+            currency: (s.currency || 'mxn').toUpperCase(),
+            payment_status: paymentStatus,
+            payment_method_type: methodType,
+            payment_method_label: methodLabel,
+            coupon_code: couponCode,
+            is_real_revenue: isRealRevenue,
+            is_completed: isPaid || isCoupon100,
+            stripe_status: s.status,
+            created_at: new Date(s.created * 1000).toISOString(),
+            source: 'stripe_api'
+          };
+        });
       } catch (stripeErr) {
         console.warn("[HERMES OVERVIEW] Stripe live list error:", stripeErr);
       }
@@ -580,13 +657,33 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
     orders.forEach(o => {
       const key = o.stripe_session_id || o.id;
       if (!combinedSalesMap.has(key)) {
+        const subtotal = o.amount_subtotal ? Number(o.amount_subtotal) : 400;
+        const rawTotal = o.amount_total !== undefined && o.amount_total !== null ? Number(o.amount_total) : (o.amount_paid !== undefined ? Number(o.amount_paid) : 0);
+        const total = rawTotal > 1000 ? rawTotal / 100 : rawTotal;
+        const discount = o.amount_discount !== undefined ? Number(o.amount_discount) : (total === 0 ? 400 : 0);
+        const isCoupon100 = o.payment_method_type === 'coupon_100' || total === 0 || o.is_real_revenue === false || o.payment_status === 'no_payment_required';
+        const isPaid = o.payment_status === 'paid' && !isCoupon100;
+        const isRealRevenue = o.is_real_revenue !== undefined ? Boolean(o.is_real_revenue) : (isPaid && total > 0);
+        const actualPaid = isRealRevenue ? (total > 0 ? total : 400) : 0;
+
+        let methodType = o.payment_method_type || (isCoupon100 ? 'coupon_100' : 'card');
+        let methodLabel = methodType === 'coupon_100' ? 'Cupón 100%' : (methodType === 'oxxo' ? 'OXXO Pay' : (methodType === 'spei' ? 'SPEI' : 'Tarjeta'));
+
         combinedSalesMap.set(key, {
           id: o.stripe_session_id || `ORD-${o.id.substring(0, 8)}`,
           customer_email: o.customer_email || 'Usuario Justino',
-          customer_name: o.customer_email ? o.customer_email.split('@')[0] : 'Usuario',
-          amount_total: o.amount_total ? (o.amount_total > 1000 ? o.amount_total / 100 : o.amount_total) : 400,
+          customer_name: o.customer_name || (o.customer_email ? o.customer_email.split('@')[0] : 'Usuario'),
+          amount_subtotal: subtotal,
+          amount_discount: discount,
+          amount_paid: actualPaid,
+          amount_total: actualPaid,
           currency: (o.currency || 'mxn').toUpperCase(),
-          payment_status: o.payment_status || 'paid',
+          payment_status: o.payment_status || (isCoupon100 ? 'no_payment_required' : (isPaid ? 'paid' : 'unpaid')),
+          payment_method_type: methodType,
+          payment_method_label: methodLabel,
+          coupon_code: o.coupon_applied || (isCoupon100 ? '100% OFF' : null),
+          is_real_revenue: isRealRevenue,
+          is_completed: isPaid || isCoupon100,
           created_at: o.created_at || new Date().toISOString(),
           source: 'supabase_orders'
         });
@@ -597,13 +694,23 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    // Calculate Gross Revenue
-    const totalRevenue = allSales.reduce((acc, sale) => {
-      if (sale.payment_status === 'paid' || sale.payment_status === 'no_payment_required') {
-        return acc + (Number(sale.amount_total) || 400);
-      }
-      return acc;
-    }, 0);
+    // Calculate Real Net Revenue vs Discounts (ONLY from completed valid transactions)
+    const realPaidSales = allSales.filter(s => s.is_real_revenue && s.payment_status === 'paid' && s.amount_paid > 0);
+    const couponSales = allSales.filter(s => (s.payment_status === 'no_payment_required' || s.payment_method_type === 'coupon_100') && !s.is_real_revenue);
+    const completedSales = allSales.filter(s => s.is_completed !== false && (s.payment_status === 'paid' || s.payment_status === 'no_payment_required'));
+    const unpaidOrAbandonedSales = allSales.filter(s => s.payment_status !== 'paid' && s.payment_status !== 'no_payment_required');
+
+    const totalRealRevenue = realPaidSales.reduce((acc, sale) => acc + (Number(sale.amount_paid) || 0), 0);
+    const totalDiscountsGiven = couponSales.reduce((acc, sale) => acc + (Number(sale.amount_discount) || 400), 0);
+
+    // Method Breakdown for confirmed sales
+    const paymentMethodsBreakdown = {
+      card: realPaidSales.filter(s => s.payment_method_type === 'card').length,
+      oxxo: realPaidSales.filter(s => s.payment_method_type === 'oxxo').length,
+      spei: realPaidSales.filter(s => s.payment_method_type === 'spei').length,
+      coupon_100: couponSales.length,
+      unpaid_attempts: unpaidOrAbandonedSales.length
+    };
 
     // Match Accounts with Cases
     const accountsWithCases = profiles.map(p => {
@@ -631,8 +738,14 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
       success: true,
       timestamp: new Date().toISOString(),
       kpis: {
-        totalRevenue: totalRevenue > 0 ? totalRevenue : (allSales.length * 400),
+        totalRealRevenue: totalRealRevenue,
+        totalRealSalesCount: realPaidSales.length,
+        totalCouponSalesCount: couponSales.length,
+        totalGrossOrders: allSales.length,
+        totalDiscountsGiven: totalDiscountsGiven,
+        totalRevenue: totalRealRevenue, // Real money entering bank
         totalSalesCount: allSales.length,
+        paymentMethodsBreakdown: paymentMethodsBreakdown,
         totalAccounts: profiles.length > 0 ? profiles.length : accountsWithCases.length,
         activeCases: activeCasesCount,
         closedCases: closedCasesCount,

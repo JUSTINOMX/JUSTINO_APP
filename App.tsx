@@ -275,6 +275,8 @@ function App() {
   const handleAdminLogout = async () => {
     try {
       sessionStorage.removeItem('justino_admin_active');
+      sessionStorage.removeItem('hermes_admin_token');
+      sessionStorage.removeItem('hermes_operator');
       sessionStorage.clear();
       if (supabase) {
         await supabase.auth.signOut().catch(() => {});
@@ -282,6 +284,8 @@ function App() {
     } catch (err) {
       console.warn("Admin logout notice:", err);
     } finally {
+      setUser(null);
+      setShowLoginModal(false);
       setView('landing');
     }
   };
