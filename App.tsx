@@ -241,22 +241,49 @@ function App() {
   };
 
   const handleLogout = async () => {
-    sessionStorage.removeItem('justino_admin_active');
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      sessionStorage.removeItem('justino_admin_active');
+      sessionStorage.clear();
+      
+      // Clean up Supabase tokens from localStorage
+      if (typeof localStorage !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.includes('supabase') || key.startsWith('justino_session'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+
+      if (supabase) {
+        await supabase.auth.signOut().catch((err) => {
+          console.warn("Supabase signOut notice:", err);
+        });
+      }
+    } catch (err) {
+      console.warn("Logout error handled gracefully:", err);
+    } finally {
+      setUser(null);
+      setMessages([createInitialWelcomeMessage()]);
+      setVaultFiles([]);
+      setView('landing');
     }
-    setUser(null);
-    setMessages([createInitialWelcomeMessage()]);
-    setVaultFiles([]);
-    setView('landing');
   };
 
   const handleAdminLogout = async () => {
-    sessionStorage.removeItem('justino_admin_active');
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      sessionStorage.removeItem('justino_admin_active');
+      sessionStorage.clear();
+      if (supabase) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Admin logout notice:", err);
+    } finally {
+      setView('landing');
     }
-    setView('landing');
   };
 
   const handleNewMessage = async (msg: Message) => {

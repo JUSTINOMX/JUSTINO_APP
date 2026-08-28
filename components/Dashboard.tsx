@@ -30,18 +30,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [caseStatus, setCaseStatus] = useState<CaseStatus>('analyzing');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Derive realistic status from actual progress if not explicitly closed
   useEffect(() => {
     const savedStatus = localStorage.getItem('justino_status') as CaseStatus | null;
-    if (savedStatus) {
-      setCaseStatus(savedStatus);
-    } else {
-      const timer = setTimeout(() => {
-        setCaseStatus('in_process');
-        localStorage.setItem('justino_status', 'in_process');
-      }, 5000);
-      return () => clearTimeout(timer);
+    if (savedStatus === 'closed') {
+      setCaseStatus('closed');
+      return;
     }
-  }, []);
+
+    const hasUserSpoken = messages.some(m => m.sender === 'user');
+    const hasGeneratedDocs = vaultFiles.some(f => f.origin === 'generated');
+
+    if (hasGeneratedDocs) {
+      setCaseStatus('ready');
+    } else if (hasUserSpoken) {
+      setCaseStatus('in_process');
+    } else {
+      setCaseStatus('analyzing');
+    }
+  }, [messages, vaultFiles]);
 
   const handleCaseClosed = () => {
     setCaseStatus('closed');
@@ -105,18 +112,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="p-4 border-t border-navy-800">
           <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold">
-              {user.email.charAt(0).toUpperCase()}
+            <div className="w-10 h-10 rounded-full bg-emerald-700/80 border border-emerald-500/30 flex items-center justify-center text-white font-black text-sm shrink-0">
+              {(user.preferredName || user.username || user.email || 'U').charAt(0).toUpperCase()}
             </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">{user.email.split('@')[0]}</p>
-              <p className="text-xs text-slate-400">Expediente Digital</p>
+            <div className="overflow-hidden min-w-0">
+              <p className="text-sm font-bold text-white truncate">
+                {user.preferredName || user.username || user.email.split('@')[0]}
+              </p>
+              <p className="text-[11px] text-slate-400 font-medium truncate">
+                @{user.username || user.email.split('@')[0]} · Expediente
+              </p>
             </div>
           </div>
           
           <button 
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20 hover:border-red-500/50"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onLogout();
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:text-white hover:bg-red-500/20 active:bg-red-500/30 rounded-xl transition-all border border-red-500/20 hover:border-red-500/50 cursor-pointer shadow-sm"
           >
             <LogOut className="w-4 h-4" />
             Cerrar Sesión
@@ -174,7 +190,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {activeTab === 'vault' && (
             <Vault files={vaultFiles} />
           )}
-          {activeTab === 'timeline' && <CaseTimeline status={caseStatus} />}
+          {activeTab === 'timeline' && (
+            <CaseTimeline 
+              status={caseStatus} 
+              user={user} 
+              messages={messages} 
+              vaultFiles={vaultFiles} 
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
           {activeTab === 'legal' && <LegalFramework />}
         </div>
       </main>
