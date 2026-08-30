@@ -293,31 +293,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#06b6d408_1px,transparent_1px),linear-gradient(to_bottom,#10b98108_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none z-0" />
 
       {/* TOP CYBER HUD HEADER */}
-      <header className="sticky top-0 z-40 bg-[#050B1A]/95 backdrop-blur-md border-b border-emerald-500/20 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 bg-[#050B1A]/95 backdrop-blur-md border-b border-emerald-500/20 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* BRAND & OPERATOR IDENTIFIER */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-emerald-950/60 border border-emerald-500/40 rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-              <Logo className="w-6 h-6 text-emerald-400" />
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="p-1 sm:p-1.5 bg-emerald-950/60 border border-emerald-500/40 rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0">
+              <Logo className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-sm tracking-wider text-white uppercase">Panel de Control JUSTINO</span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-black text-xs sm:text-sm tracking-wider text-white uppercase truncate">Panel JUSTINO</span>
+                <span className="px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded shrink-0">
                   ADMIN
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                <span className="text-cyan-400">{currentTime}</span>
+              <p className="text-[9px] sm:text-[10px] text-slate-400 flex items-center gap-1 sm:gap-1.5 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
+                <span className="text-cyan-400 font-mono truncate">{currentTime}</span>
               </p>
             </div>
           </div>
         </div>
 
         {/* SYSTEM STATUS TELEMETRY & CONTROLS */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           
           <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg text-[11px]">
             <div className="flex items-center gap-1.5">
@@ -334,7 +334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <button 
             onClick={() => fetchData(true)}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold transition-all disabled:opacity-50 cursor-pointer active:scale-95 touch-manipulation"
             title="Sincronizar datos"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -349,7 +349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               sessionStorage.clear();
               onLogout();
             }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-red-950/30 hover:bg-red-900/50 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 bg-red-950/30 hover:bg-red-900/50 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer active:scale-95 touch-manipulation"
             title="Cerrar sesión administrativa"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -361,13 +361,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       </header>
 
       {/* MAIN CYBER CONTAINER */}
-      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 relative z-10">
+      <main className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 relative z-10">
         
         {/* KPI CARDS HUD (FINANCIAL AUDIT & REAL REVENUE CLARITY) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 sm:gap-4">
           
           {/* KPI 1: INGRESOS REALES COBRADOS */}
-          <div className="bg-[#070E22]/95 border-2 border-emerald-500/50 p-4 rounded-xl relative overflow-hidden group hover:border-emerald-400 transition-all shadow-[0_0_25px_rgba(16,185,129,0.15)] col-span-2 sm:col-span-1 lg:col-span-2">
+          <div className="bg-[#070E22]/95 border-2 border-emerald-500/50 p-3.5 sm:p-4 rounded-xl relative overflow-hidden group hover:border-emerald-400 transition-all shadow-[0_0_25px_rgba(16,185,129,0.15)] col-span-1 sm:col-span-2 lg:col-span-2">
             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
             <div className="flex items-center justify-between text-emerald-400 text-[10px] uppercase font-bold tracking-wider mb-1">
               <span className="flex items-center gap-1.5">
@@ -381,14 +381,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
               ${kpis.totalRealRevenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })} <span className="text-xs text-emerald-400 font-normal">MXN</span>
             </div>
-            <div className="text-[11px] text-emerald-300/90 mt-2 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            <div className="text-[11px] text-emerald-300/90 mt-1.5 sm:mt-2 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse shrink-0" />
               <span><strong>{kpis.totalRealSalesCount}</strong> pagos reales en Stripe</span>
             </div>
           </div>
 
           {/* KPI 2: CUPONES 100% / PRUEBAS */}
-          <div className="bg-[#070E22]/90 border border-purple-500/40 p-4 rounded-xl relative overflow-hidden group hover:border-purple-400 transition-all shadow-[0_0_20px_rgba(168,85,247,0.08)] col-span-2 sm:col-span-1 lg:col-span-2">
+          <div className="bg-[#070E22]/90 border border-purple-500/40 p-3.5 sm:p-4 rounded-xl relative overflow-hidden group hover:border-purple-400 transition-all shadow-[0_0_20px_rgba(168,85,247,0.08)] col-span-1 sm:col-span-2 lg:col-span-2">
             <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between text-purple-300 text-[10px] uppercase font-bold tracking-wider mb-1">
               <span className="flex items-center gap-1.5">
@@ -402,14 +402,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <div className="text-2xl sm:text-3xl font-black text-purple-200 tracking-tight">
               {kpis.totalCouponSalesCount} <span className="text-xs text-purple-400 font-normal">cupones</span>
             </div>
-            <div className="text-[11px] text-purple-400/90 mt-2 flex items-center gap-1">
-              <Tag className="w-3 h-3 text-purple-400" />
+            <div className="text-[11px] text-purple-400/90 mt-1.5 sm:mt-2 flex items-center gap-1">
+              <Tag className="w-3 h-3 text-purple-400 shrink-0" />
               <span>-${kpis.totalDiscountsGiven.toLocaleString()} MXN en descuentos</span>
             </div>
           </div>
 
           {/* KPI 3: TOTAL CUENTAS REGISTRADAS */}
-          <div className="bg-[#070E22]/90 border border-cyan-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+          <div className="bg-[#070E22]/90 border border-cyan-500/30 p-3.5 sm:p-4 rounded-xl relative overflow-hidden group hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.05)]">
             <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
               <span>CUENTAS</span>
@@ -419,12 +419,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               {kpis.totalAccounts}
             </div>
             <div className="text-[10px] text-cyan-400/80 mt-1">
-              En base Supabase
+              En Supabase Cloud
             </div>
           </div>
 
           {/* KPI 4: CASOS ACTIVOS / CERRADOS */}
-          <div className="bg-[#070E22]/90 border border-teal-500/30 p-4 rounded-xl relative overflow-hidden group hover:border-teal-400 transition-all shadow-[0_0_20px_rgba(20,184,166,0.05)]">
+          <div className="bg-[#070E22]/90 border border-teal-500/30 p-3.5 sm:p-4 rounded-xl relative overflow-hidden group hover:border-teal-400 transition-all shadow-[0_0_20px_rgba(20,184,166,0.05)]">
             <div className="absolute top-0 right-0 w-16 h-16 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">
               <span>EXPEDIENTES</span>
@@ -435,7 +435,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <span className="text-xs text-amber-400 font-normal">/ {kpis.closedCases} cerr.</span>
             </div>
             <div className="text-[10px] text-teal-400/80 mt-1 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 inline-block animate-pulse shrink-0" />
               {kpis.activeCases} en proceso
             </div>
           </div>
@@ -443,70 +443,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </div>
 
         {/* PAYMENT METHODS QUICK HUD BADGES */}
-        <div className="bg-[#050A18]/80 border border-white/10 rounded-xl p-3 sm:px-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-400">
+        <div className="bg-[#050A18]/80 border border-white/10 rounded-xl p-3 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-400 shrink-0">
             <Layers className="w-4 h-4 text-cyan-400" />
             <span className="font-bold uppercase text-[11px] text-white">DESGLOSE DE MÉTODOS:</span>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] flex items-center gap-1.5 font-bold">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-[11px] flex items-center gap-1.5 font-bold">
               <CreditCard className="w-3 h-3" />
               Tarjeta (Cobro real): {kpis.paymentMethodsBreakdown?.card || 0}
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] flex items-center gap-1.5 font-bold">
+            <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] sm:text-[11px] flex items-center gap-1.5 font-bold">
               <Store className="w-3 h-3" />
               OXXO Pay: {kpis.paymentMethodsBreakdown?.oxxo || 0}
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[11px] flex items-center gap-1.5 font-bold">
+            <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[10px] sm:text-[11px] flex items-center gap-1.5 font-bold">
               <Zap className="w-3 h-3" />
               SPEI: {kpis.paymentMethodsBreakdown?.spei || 0}
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[11px] flex items-center gap-1.5 font-bold">
+            <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[10px] sm:text-[11px] flex items-center gap-1.5 font-bold">
               <Gift className="w-3 h-3" />
-              Cupón 100% Descuento: {kpis.paymentMethodsBreakdown?.coupon_100 || kpis.totalCouponSalesCount}
+              Cupones 100%: {kpis.paymentMethodsBreakdown?.coupon_100 || kpis.totalCouponSalesCount}
             </span>
           </div>
         </div>
 
-        {/* NAVIGATION TABS (CYBERPUNK CONSOLE SWITCHER) */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-emerald-500/20 pb-3">
+        {/* NAVIGATION TABS (CYBERPUNK CONSOLE SWITCHER - MOBILE OPTIMIZED HORIZONTAL SCROLL) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 border-b border-emerald-500/20 pb-3">
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none touch-pan-x">
             <button
               onClick={() => setActiveTab('sales')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer touch-manipulation ${
                 activeTab === 'sales'
                   ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]'
                   : 'bg-black/50 text-slate-400 hover:text-white border border-white/10 hover:border-emerald-500/30'
               }`}
             >
-              <CreditCard className="w-4 h-4" />
-              <span>[01] Ventas & Auditoría ({data?.sales.length || 0})</span>
+              <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Ventas ({data?.sales.length || 0})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('accounts')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer touch-manipulation ${
                 activeTab === 'accounts'
                   ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]'
                   : 'bg-black/50 text-slate-400 hover:text-white border border-white/10 hover:border-cyan-500/30'
               }`}
             >
-              <Users className="w-4 h-4" />
-              <span>[02] Cuentas & Casos ({data?.accounts.length || 0})</span>
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Cuentas ({data?.accounts.length || 0})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('logs')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase transition-all flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer touch-manipulation ${
                 activeTab === 'logs'
                   ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                   : 'bg-black/50 text-slate-400 hover:text-white border border-white/10 hover:border-purple-500/30'
               }`}
             >
-              <Terminal className="w-4 h-4" />
-              <span>[03] Telemetría / Logs</span>
+              <Terminal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Logs</span>
             </button>
           </div>
 
@@ -515,7 +515,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             href="https://dashboard.stripe.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-emerald-400 transition-colors px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg"
+            className="flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-emerald-400 transition-colors px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg w-full sm:w-auto"
           >
             <span>Abrir Stripe Dashboard</span>
             <ExternalLink className="w-3 h-3" />
@@ -528,67 +528,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <div className="space-y-6 animate-in fade-in duration-200">
             
             {/* SALES FILTER & SEARCH BAR */}
-            <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+            <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3 sm:space-y-4">
               
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col gap-3">
                 <div>
-                  <h3 className="text-lg font-bold text-white uppercase flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-emerald-400" />
-                    Auditoría de Ventas &amp; Métodos de Pago
+                  <h3 className="text-base sm:text-lg font-bold text-white uppercase flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
+                    <span>Auditoría de Ventas</span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                     Diferenciación exacta entre dinero real cobrado ($400 MXN) y registros promocionales / cupones 100%
                   </p>
                 </div>
 
-                {/* FILTER PILLS */}
-                <div className="flex flex-wrap items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 text-xs">
+                {/* FILTER PILLS - HORIZONTAL SCROLL ON MOBILE */}
+                <div className="flex items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto pb-1 scrollbar-none touch-pan-x">
                   <button
                     onClick={() => setSalesFilter('completed')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       salesFilter === 'completed'
                         ? 'bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]'
                         : 'text-slate-300 hover:text-white'
                     }`}
                   >
-                    VENTAS CONCLUIDAS ({kpis.totalRealSalesCount + kpis.totalCouponSalesCount})
+                    CONCLUIDAS ({kpis.totalRealSalesCount + kpis.totalCouponSalesCount})
                   </button>
                   <button
                     onClick={() => setSalesFilter('real_only')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       salesFilter === 'real_only'
                         ? 'bg-emerald-400 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]'
                         : 'text-emerald-400 hover:text-emerald-300'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0" />
                     PAGOS REALES ({kpis.totalRealSalesCount})
                   </button>
                   <button
                     onClick={() => setSalesFilter('coupons_only')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       salesFilter === 'coupons_only'
                         ? 'bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
                         : 'text-purple-300 hover:text-purple-200'
                     }`}
                   >
-                    <Gift className="w-3 h-3" />
-                    CUPONES 100% ({kpis.totalCouponSalesCount})
+                    <Gift className="w-3 h-3 shrink-0" />
+                    CUPONES ({kpis.totalCouponSalesCount})
                   </button>
                   <button
                     onClick={() => setSalesFilter('unpaid')}
-                    className={`px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                    className={`px-2 sm:px-2.5 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       salesFilter === 'unpaid'
                         ? 'bg-amber-500/80 text-black'
                         : 'text-amber-400/80 hover:text-amber-300'
                     }`}
                   >
-                    <AlertTriangle className="w-3 h-3" />
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
                     SIN PAGAR ({Math.max(0, (data?.sales.length || 0) - (kpis.totalRealSalesCount + kpis.totalCouponSalesCount))})
                   </button>
                   <button
                     onClick={() => setSalesFilter('all')}
-                    className={`px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       salesFilter === 'all'
                         ? 'bg-white/20 text-white'
                         : 'text-slate-500 hover:text-slate-300'
@@ -601,18 +601,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
               {/* SEARCH INPUT */}
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-500 absolute left-4 top-3.5" />
+                <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 sm:top-3.5" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar transacción por correo, nombre de cliente o código de cupón..."
-                  className="w-full bg-black/80 border border-white/10 focus:border-emerald-400 rounded-xl py-3 pl-11 pr-4 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-all font-mono"
+                  placeholder="Buscar por correo, nombre o código..."
+                  className="w-full bg-black/80 border border-white/10 focus:border-emerald-400 rounded-xl py-2.5 sm:py-3 pl-10 pr-16 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-all font-mono"
                 />
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3.5 top-3 text-xs text-slate-500 hover:text-white"
+                    className="absolute right-3 top-2.5 text-[11px] text-slate-400 hover:text-white px-2 py-0.5 bg-white/5 rounded"
                   >
                     Limpiar
                   </button>
@@ -621,9 +621,129 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
             </div>
 
-            {/* SALES TABLE WITH PAYMENT METHOD CLASSIFICATION */}
+            {/* SALES VIEW: MOBILE CARDS (< md) + DESKTOP TABLE (>= md) */}
             <div className="bg-[#070D1F]/90 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
+              
+              {/* MOBILE CARDS VIEW */}
+              <div className="block md:hidden divide-y divide-white/5">
+                {isLoading ? (
+                  <div className="py-12 text-center text-slate-500 font-mono text-xs">
+                    <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-400" />
+                    AUDITANDO TRANSACCIONES EN STRIPE Y SUPABASE...
+                  </div>
+                ) : filteredSales.length === 0 ? (
+                  <div className="py-10 text-center text-slate-500 p-4">
+                    <CreditCard className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                    <p className="text-xs font-bold text-slate-400">Sin transacciones coincidentes</p>
+                  </div>
+                ) : (
+                  filteredSales.map((sale, idx) => {
+                    const isPaid = sale.payment_status === 'paid' && Boolean(sale.is_real_revenue);
+                    const isCoupon = (sale.payment_status === 'no_payment_required' || sale.payment_method_type === 'coupon_100') && !sale.is_real_revenue;
+                    const isUnpaid = !isPaid && !isCoupon;
+                    const isOxxo = sale.payment_method_type === 'oxxo';
+                    const isSpei = sale.payment_method_type === 'spei';
+
+                    return (
+                      <div key={sale.id || idx} className="p-3.5 space-y-2.5 hover:bg-emerald-950/10 transition-colors">
+                        
+                        {/* HEADER: CLIENT & REVENUE */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-bold text-white text-xs truncate">{sale.customer_name || 'Usuario Justino'}</div>
+                            <div className="text-slate-400 text-[10px] font-mono truncate">{sale.customer_email}</div>
+                          </div>
+                          
+                          <div className="text-right shrink-0">
+                            {isPaid ? (
+                              <div className="font-black text-emerald-400 text-sm shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+                                +${Number(sale.amount_paid || sale.amount_total || 400).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                              </div>
+                            ) : isCoupon ? (
+                              <div>
+                                <span className="font-bold text-slate-400 text-xs">$0.00 MXN</span>
+                                <span className="text-[9px] text-purple-400 line-through block">$400.00 MXN</span>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-bold text-slate-500 text-xs">$0.00 MXN</span>
+                                <span className="text-[9px] text-amber-500/70 block">No Cobrado</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* BADGES ROW */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          {/* METHOD */}
+                          {isCoupon ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                              <Gift className="w-2.5 h-2.5 text-purple-400" />
+                              Cupón 100%
+                            </span>
+                          ) : isOxxo ? (
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex items-center gap-1 ${
+                              isPaid ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-950/30 text-amber-500/80 border-amber-700/30'
+                            }`}>
+                              <Store className="w-2.5 h-2.5 text-amber-400" />
+                              OXXO {isUnpaid ? 'Pendiente' : ''}
+                            </span>
+                          ) : isSpei ? (
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex items-center gap-1 ${
+                              isPaid ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-cyan-950/30 text-cyan-500/80 border-cyan-700/30'
+                            }`}>
+                              <Zap className="w-2.5 h-2.5 text-cyan-400" />
+                              SPEI {isUnpaid ? 'Pendiente' : ''}
+                            </span>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex items-center gap-1 ${
+                              isPaid ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              <CreditCard className="w-2.5 h-2.5 text-emerald-400" />
+                              Tarjeta {isUnpaid ? '(Fallido)' : ''}
+                            </span>
+                          )}
+
+                          {/* STATUS */}
+                          {isPaid ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              PAGADO
+                            </span>
+                          ) : isCoupon ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                              <Tag className="w-2.5 h-2.5 text-purple-400" />
+                              PROMO
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-950/40 text-amber-400/90 border border-amber-500/30 flex items-center gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                              {sale.payment_status === 'expired' ? 'VENCIDO' : 'SIN PAGAR'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* FOOTER METADATA */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-1 border-t border-white/5">
+                          <span className="truncate max-w-[140px]" title={sale.id}>{sale.id}</span>
+                          <span>
+                            {new Date(sale.created_at).toLocaleDateString('es-MX', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="text-slate-400 border-b border-emerald-500/20 bg-black/40">
@@ -796,6 +916,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   </tbody>
                 </table>
               </div>
+
             </div>
 
           </div>
@@ -806,24 +927,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           <div className="space-y-6 animate-in fade-in duration-200">
             
             {/* SEARCH & FILTERS BAR */}
-            <div className="bg-[#070D1F]/90 border border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+            <div className="bg-[#070D1F]/90 border border-cyan-500/30 rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3 sm:space-y-4">
               
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col gap-3">
                 <div>
-                  <h3 className="text-lg font-bold text-white uppercase flex items-center gap-2">
-                    <Users className="w-5 h-5 text-cyan-400" />
-                    Monitor de Cuentas &amp; Estado de Casos
+                  <h3 className="text-base sm:text-lg font-bold text-white uppercase flex items-center gap-2">
+                    <Users className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+                    <span>Monitor de Cuentas &amp; Casos</span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                     Administra expedientes y conmuta el estado de cada caso en tiempo real
                   </p>
                 </div>
 
-                {/* STATUS FILTER PILLS */}
-                <div className="flex items-center gap-2 bg-black/60 p-1 rounded-xl border border-white/10 text-xs">
+                {/* STATUS FILTER PILLS - HORIZONTAL SCROLL ON MOBILE */}
+                <div className="flex items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto pb-1 scrollbar-none touch-pan-x">
                   <button
                     onClick={() => setStatusFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       statusFilter === 'all'
                         ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]'
                         : 'text-slate-400 hover:text-white'
@@ -833,24 +954,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   </button>
                   <button
                     onClick={() => setStatusFilter('active')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       statusFilter === 'active'
                         ? 'bg-emerald-500 text-black shadow-[0_0_10px_rgba(16,185,129,0.4)]'
                         : 'text-emerald-400 hover:text-emerald-300'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0" />
                     ACTIVAS ({kpis.activeCases})
                   </button>
                   <button
                     onClick={() => setStatusFilter('closed')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation text-[11px] sm:text-xs ${
                       statusFilter === 'closed'
                         ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]'
                         : 'text-amber-400 hover:text-amber-300'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shrink-0" />
                     CERRADAS ({kpis.closedCases})
                   </button>
                 </div>
@@ -858,18 +979,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
               {/* SEARCH INPUT */}
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-500 absolute left-4 top-3.5" />
+                <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-3 sm:top-3.5" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar cuenta por nombre, email o ID de expediente..."
-                  className="w-full bg-black/80 border border-white/10 focus:border-cyan-400 rounded-xl py-3 pl-11 pr-4 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition-all font-mono"
+                  placeholder="Buscar cuenta por nombre, email o ID..."
+                  className="w-full bg-black/80 border border-white/10 focus:border-cyan-400 rounded-xl py-2.5 sm:py-3 pl-10 pr-16 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition-all font-mono"
                 />
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3.5 top-3 text-xs text-slate-500 hover:text-white"
+                    className="absolute right-3 top-2.5 text-[11px] text-slate-400 hover:text-white px-2 py-0.5 bg-white/5 rounded"
                   >
                     Limpiar
                   </button>
@@ -878,9 +999,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
             </div>
 
-            {/* ACCOUNTS & CASES TABLE */}
+            {/* ACCOUNTS VIEW: MOBILE CARDS (< md) + DESKTOP TABLE (>= md) */}
             <div className="bg-[#070D1F]/90 border border-cyan-500/30 rounded-2xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
+              
+              {/* MOBILE CARDS VIEW */}
+              <div className="block md:hidden divide-y divide-white/5">
+                {isLoading ? (
+                  <div className="py-12 text-center text-slate-500 font-mono text-xs">
+                    <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-cyan-400" />
+                    CONSULTANDO SUPABASE CLOUD...
+                  </div>
+                ) : filteredAccounts.length === 0 ? (
+                  <div className="py-10 text-center text-slate-500 p-4">
+                    <Users className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                    <p className="text-xs font-bold text-slate-400">No se encontraron cuentas coincidentes</p>
+                  </div>
+                ) : (
+                  filteredAccounts.map((account) => {
+                    const isClosed = account.caseStatus === 'closed';
+                    const isUpdating = togglingCaseId === account.id;
+
+                    return (
+                      <div key={account.id} className="p-3.5 space-y-3 hover:bg-cyan-950/10 transition-colors">
+                        
+                        {/* USER INFO HEADER */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-bold text-white text-xs flex items-center gap-1.5 flex-wrap">
+                              <span className="truncate">{account.displayName}</span>
+                              {account.hasActiveAccess && (
+                                <span className="px-1.5 py-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded shrink-0">
+                                  ACCESO ACTIVO
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-slate-400 text-[10px] font-mono truncate">{account.email}</div>
+                          </div>
+
+                          {/* STATUS BADGE */}
+                          <div className="shrink-0">
+                            {isClosed ? (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                <XCircle className="w-2.5 h-2.5 text-amber-400" />
+                                CERRADO
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                ACTIVO
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* CASE INFO BOX */}
+                        <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 text-[11px] space-y-1">
+                          <div className="text-slate-200 font-medium line-clamp-2">{account.caseTitle}</div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <span>Tipo: <span className="text-slate-400">{account.caseType}</span></span>
+                            <span>
+                              {new Date(account.createdAt).toLocaleDateString('es-MX', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* ACTION TOGGLE BUTTON */}
+                        <button
+                          onClick={() => handleToggleCaseStatus(account)}
+                          disabled={isUpdating}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 touch-manipulation active:scale-[0.98] ${
+                            isClosed
+                              ? 'bg-emerald-950/70 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                              : 'bg-amber-950/70 hover:bg-amber-900/90 text-amber-300 border border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.15)]'
+                          }`}
+                        >
+                          {isUpdating ? (
+                            <span className="animate-pulse">ACTUALIZANDO EN SUPABASE...</span>
+                          ) : isClosed ? (
+                            <span>&gt; REABRIR EXPEDIENTE</span>
+                          ) : (
+                            <span>&gt; MARCAR CASO COMO CERRADO</span>
+                          )}
+                        </button>
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="text-slate-400 border-b border-cyan-500/20 bg-black/40">
@@ -986,6 +1199,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   </tbody>
                 </table>
               </div>
+
             </div>
 
           </div>
@@ -993,37 +1207,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         {/* TAB CONTENT 3: TELEMETRÍA / LOGS */}
         {activeTab === 'logs' && (
-          <div className="bg-[#050A18] border border-purple-500/30 rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between border-b border-white/5 pb-4">
+          <div className="bg-[#050A18] border border-purple-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-3 sm:space-y-4 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-white/5 pb-3 sm:pb-4">
               <div className="flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-purple-400" />
-                <h3 className="text-base font-bold text-white uppercase tracking-wider">
+                <Terminal className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
                   Consola de Telemetría en Vivo
                 </h3>
               </div>
-              <span className="text-xs text-purple-400 font-mono">
+              <span className="text-[10px] sm:text-xs text-purple-400 font-mono">
                 FEED STATUS: BUFFER ACTIVE
               </span>
             </div>
 
-            <div className="bg-black/80 rounded-xl p-4 font-mono text-xs text-slate-300 space-y-2.5 max-h-[450px] overflow-y-auto border border-white/5">
+            <div className="bg-black/80 rounded-xl p-3 sm:p-4 font-mono text-[11px] sm:text-xs text-slate-300 space-y-2.5 max-h-[450px] overflow-y-auto border border-white/5">
               {liveLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 border-b border-white/5 pb-2">
-                  <span className="text-slate-500 shrink-0">[{log.time}]</span>
-                  <span className={`shrink-0 font-bold ${
-                    log.type === 'sale' ? 'text-emerald-400' :
-                    log.type === 'case' ? 'text-amber-400' :
-                    log.type === 'user' ? 'text-cyan-400' : 'text-purple-400'
-                  }`}>
-                    {log.type === 'sale' ? '[STRIPE_FINANCIAL]' :
-                     log.type === 'case' ? '[CASE_EVENT]' :
-                     log.type === 'user' ? '[AUTH_USER]' : '[SYSTEM_LOG]'}
-                  </span>
-                  <span className="text-slate-200">{log.text}</span>
+                <div key={log.id} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3 border-b border-white/5 pb-2">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-slate-500">[{log.time}]</span>
+                    <span className={`font-bold ${
+                      log.type === 'sale' ? 'text-emerald-400' :
+                      log.type === 'case' ? 'text-amber-400' :
+                      log.type === 'user' ? 'text-cyan-400' : 'text-purple-400'
+                    }`}>
+                      {log.type === 'sale' ? '[STRIPE]' :
+                       log.type === 'case' ? '[CASE]' :
+                       log.type === 'user' ? '[AUTH]' : '[SYSTEM]'}
+                    </span>
+                  </div>
+                  <span className="text-slate-200 break-words">{log.text}</span>
                 </div>
               ))}
-              <div className="text-slate-600 text-[11px] pt-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="text-slate-600 text-[10px] sm:text-[11px] pt-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 ESCUCHANDO EVENTOS DE SERVIDOR...
               </div>
             </div>
