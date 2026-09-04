@@ -196,9 +196,9 @@ app.post("/api/v1/webhooks/stripe", express.raw({ type: 'application/json' }), a
         }
 
         // 3. Insertar orden auditada en public.orders con desglose financiero
-        const subtotalInPesos = session.amount_subtotal ? session.amount_subtotal / 100 : 400;
+        const subtotalInPesos = session.amount_subtotal ? session.amount_subtotal / 100 : 480;
         const totalInPesos = session.amount_total !== undefined && session.amount_total !== null ? session.amount_total / 100 : 0;
-        const discountInPesos = session.total_details?.amount_discount ? session.total_details.amount_discount / 100 : (totalInPesos === 0 ? 400 : 0);
+        const discountInPesos = session.total_details?.amount_discount ? session.total_details.amount_discount / 100 : (totalInPesos === 0 ? 480 : 0);
         const isCoupon100 = totalInPesos === 0 || session.payment_status === 'no_payment_required' || discountInPesos >= subtotalInPesos;
         const isRealRevenue = !isCoupon100 && totalInPesos > 0;
         const couponCode = session.total_details?.breakdown?.discounts?.[0]?.discount?.coupon?.id || session.discounts?.[0]?.coupon?.id || null;
@@ -578,9 +578,9 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
         });
 
         stripeLiveSales = (sessions.data || []).map(s => {
-          const subtotal = s.amount_subtotal ? s.amount_subtotal / 100 : 400;
+          const subtotal = s.amount_subtotal ? s.amount_subtotal / 100 : 480;
           const rawTotal = (s.amount_total !== undefined && s.amount_total !== null) ? s.amount_total / 100 : 0;
-          const discount = s.total_details?.amount_discount ? s.total_details.amount_discount / 100 : (rawTotal === 0 ? 400 : 0);
+          const discount = s.total_details?.amount_discount ? s.total_details.amount_discount / 100 : (rawTotal === 0 ? 480 : 0);
           
           // Strict Stripe Status Evaluation
           const isPaid = s.payment_status === 'paid';
@@ -657,14 +657,14 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
     orders.forEach(o => {
       const key = o.stripe_session_id || o.id;
       if (!combinedSalesMap.has(key)) {
-        const subtotal = o.amount_subtotal ? Number(o.amount_subtotal) : 400;
+        const subtotal = o.amount_subtotal ? Number(o.amount_subtotal) : 480;
         const rawTotal = o.amount_total !== undefined && o.amount_total !== null ? Number(o.amount_total) : (o.amount_paid !== undefined ? Number(o.amount_paid) : 0);
         const total = rawTotal > 1000 ? rawTotal / 100 : rawTotal;
-        const discount = o.amount_discount !== undefined ? Number(o.amount_discount) : (total === 0 ? 400 : 0);
+        const discount = o.amount_discount !== undefined ? Number(o.amount_discount) : (total === 0 ? 480 : 0);
         const isCoupon100 = o.payment_method_type === 'coupon_100' || total === 0 || o.is_real_revenue === false || o.payment_status === 'no_payment_required';
         const isPaid = o.payment_status === 'paid' && !isCoupon100;
         const isRealRevenue = o.is_real_revenue !== undefined ? Boolean(o.is_real_revenue) : (isPaid && total > 0);
-        const actualPaid = isRealRevenue ? (total > 0 ? total : 400) : 0;
+        const actualPaid = isRealRevenue ? (total > 0 ? total : 480) : 0;
 
         let methodType = o.payment_method_type || (isCoupon100 ? 'coupon_100' : 'card');
         let methodLabel = methodType === 'coupon_100' ? 'Cupón 100%' : (methodType === 'oxxo' ? 'OXXO Pay' : (methodType === 'spei' ? 'SPEI' : 'Tarjeta'));
@@ -701,7 +701,7 @@ app.get("/api/v1/admin/hermes-overview", hermesAuthMiddleware, async (req, res) 
     const unpaidOrAbandonedSales = allSales.filter(s => s.payment_status !== 'paid' && s.payment_status !== 'no_payment_required');
 
     const totalRealRevenue = realPaidSales.reduce((acc, sale) => acc + (Number(sale.amount_paid) || 0), 0);
-    const totalDiscountsGiven = couponSales.reduce((acc, sale) => acc + (Number(sale.amount_discount) || 400), 0);
+    const totalDiscountsGiven = couponSales.reduce((acc, sale) => acc + (Number(sale.amount_discount) || 480), 0);
 
     // Method Breakdown for confirmed sales
     const paymentMethodsBreakdown = {
@@ -837,7 +837,7 @@ app.get("/api/v1/admin/stats", authMiddleware, isAdminMiddleware, async (req, re
     const totalOrders = orders || [];
     const totalRevenue = totalOrders
       .filter(o => o.payment_status === 'paid' || o.payment_status === 'no_payment_required')
-      .reduce((sum, o) => sum + (o.amount_total ? o.amount_total / 100 : 400), 0);
+      .reduce((sum, o) => sum + (o.amount_total ? o.amount_total / 100 : 480), 0);
 
     const stats = {
       totalCases: totalCasesCount,

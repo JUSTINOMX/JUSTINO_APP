@@ -69,22 +69,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
         </div>
 
         <section className="text-center max-w-5xl mx-auto mb-20">
-          <h1 className="text-5xl md:text-7xl font-bold leading-[1.1] mb-8 tracking-tight">
-            ¿No sabes qué hacer con tu problema legal?<br />
-            <span className="text-emerald-400">Justino es tu guía legal digital.</span>
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold leading-[1.15] mb-8 tracking-tight">
+            <span>¿No sabes qué hacer con tu problema legal?</span>
+            <span className="block text-xl sm:text-2xl md:text-3xl font-normal text-slate-300 my-3 md:my-4">
+              No tienes que enfrentarlo sin saber por dónde empezar.
+            </span>
+            <span className="text-emerald-400">Justino te ayuda a tomar el control de tu caso.</span>
           </h1>
           <p className="text-slate-400 text-xl md:text-2xl max-w-4xl mx-auto mb-10 leading-relaxed font-medium">
-            Te ayuda a entender tu situación, te prepara un plan de acción, te genera los documentos que necesites y te dice exactamente qué hacer, paso a paso.
+            Entiende tu situación, organiza tus documentos y pruebas, te ayuda a preparar los documentos que necesitas y te explica qué opciones tienes y cuáles pueden ser tus siguientes pasos.
           </p>
 
           <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-8 py-5 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl mb-12 max-w-2xl mx-auto text-center sm:text-left shadow-[0_0_30px_rgba(16,185,129,0.05)]">
             <div className="flex items-baseline gap-1 shrink-0">
-              <span className="text-4xl font-black text-emerald-400">$400</span>
+              <span className="text-4xl font-black text-emerald-400">$480</span>
               <span className="text-sm font-bold text-emerald-500/80">MXN</span>
             </div>
             <div className="w-px h-8 bg-white/10 hidden sm:block"></div>
             <div className="text-slate-300 text-base font-medium leading-relaxed">
-              Desde el inicio de tu caso hasta que tú decidas cerrarlo.
+              Justino dará seguimiento a tu caso único hasta que decidas cerralo.
             </div>
           </div>
 
@@ -102,7 +105,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
         </section>
 
         {/* Un problema legal no debe enfrentarse solo */}
-        <section className="w-full max-w-5xl mx-auto mb-40 text-center">
+        <section className="w-full max-w-5xl mx-auto mb-32 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">Un problema legal no debe enfrentarse solo</h2>
           <p className="text-slate-500 text-lg mb-12">Muchas personas no avanzan en su problema legal porque:</p>
           
@@ -116,6 +119,50 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
           <div className="bg-emerald-500/5 border border-emerald-500/10 p-10 rounded-[32px] max-w-4xl mx-auto">
              <p className="text-emerald-400 text-xl font-bold mb-3">Y mientras tanto, el problema crece.</p>
              <p className="text-slate-400 text-base">Justino existe para que no te detengas, para que tengas claridad y acompañamiento desde el primer momento.</p>
+          </div>
+        </section>
+
+        {/* CASOS QUE JUSTINO PUEDE AYUDARTE A PREPARAR */}
+        <section className="w-full max-w-4xl mx-auto mb-32 text-center">
+          <h2 className="text-3xl md:text-5xl font-bold mb-4 tracking-tight uppercase">
+            Casos que Justino puede ayudarte a preparar
+          </h2>
+          <p className="text-slate-400 text-base md:text-lg mb-10 max-w-2xl mx-auto">
+            Orientación clara, estructuración de pruebas y preparación de documentos específicos para tu situación.
+          </p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 text-left">
+            {[
+              "Problemas de arrendamiento.",
+              "Deudas y cobro.",
+              "Contratos.",
+              "Divorcio y asuntos familiares aplicables.",
+              "Pensión alimenticia.",
+              "Conflictos laborales.",
+              "Otros trámites civiles frecuentes."
+            ].map((text, i) => (
+              <div 
+                key={i} 
+                className="flex items-center gap-4 p-5 bg-white/5 border border-white/10 rounded-2xl hover:border-emerald-500/20 transition-all duration-300 shadow-md"
+              >
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
+                  ✓
+                </div>
+                <p className="text-slate-200 text-base md:text-lg font-medium">{text}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-amber-500/5 border border-amber-500/20 p-6 md:p-8 rounded-3xl text-left flex items-start gap-4">
+            <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
+              <AlertCircle className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-1.5">Delimitación de alcance</p>
+              <p className="text-slate-300 text-sm md:text-base leading-relaxed">
+                Justino no atiende casos penales graves, emergencias ni situaciones que requieran representación inmediata ante una autoridad así como casos de derecho fiscal.
+              </p>
+            </div>
           </div>
         </section>
               {/* ¿QUÉ HARÁ JUSTINO POR TI? */}
@@ -194,7 +241,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600 mb-2">TODO ESTO POR</p>
                 <div className="flex justify-center md:justify-start items-baseline gap-2 mb-6">
-                  <span className="text-6xl md:text-7xl font-black text-slate-900">$400</span>
+                  <span className="text-6xl md:text-7xl font-black text-slate-900">$480</span>
                   <span className="text-xl font-bold text-emerald-600">MXN</span>
                 </div>
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 inline-block">

@@ -275,7 +275,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                       <p className="text-emerald-600 text-xs font-bold uppercase tracking-wider mt-0.5">Pago único • Sin mensualidades</p>
                     </div>
                     <div className="text-right">
-                      <span className="text-3xl sm:text-4xl font-black text-emerald-600 leading-none">$400</span>
+                      <span className="text-3xl sm:text-4xl font-black text-emerald-600 leading-none">$480</span>
                       <p className="text-[11px] text-emerald-700 font-extrabold uppercase">MXN</p>
                     </div>
                   </div>
