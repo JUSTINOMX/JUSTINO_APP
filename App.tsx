@@ -40,33 +40,31 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
 
-  // Detect if accessing the new landing page (V2) via path, search query, or hash
-  const detectIsV2 = (): boolean => {
+  // The new high-converting landing page (LandingPageV2) is now the DEFAULT for root (/) and /lp.
+  // The previous landing page remains preserved and accessible for traffic via /v1, /respaldo, /original, ?v=1, etc.
+  const detectIsPreviousLanding = (): boolean => {
     if (typeof window === 'undefined') return false;
     const path = window.location.pathname.toLowerCase();
     const params = new URLSearchParams(window.location.search);
     const hash = window.location.hash.toLowerCase();
     return (
-      path.startsWith('/v2') || 
-      path.startsWith('/lp') || 
-      path.startsWith('/nueva') || 
-      path.startsWith('/conversion') ||
-      path.startsWith('/caso') ||
-      params.get('v') === '2' || 
-      params.get('lp') === '2' || 
-      params.get('version') === '2' || 
-      params.get('landing') === '2' ||
-      params.get('nueva') === 'true' ||
-      hash.includes('v2') ||
-      hash.includes('nueva')
+      path.startsWith('/v1') || 
+      path.startsWith('/respaldo') || 
+      path.startsWith('/original') || 
+      path.startsWith('/antigua') ||
+      params.get('v') === '1' || 
+      params.get('version') === '1' || 
+      params.get('respaldo') === 'true' ||
+      hash.includes('v1') ||
+      hash.includes('respaldo')
     );
   };
 
-  const [isV2Landing, setIsV2Landing] = useState<boolean>(detectIsV2);
+  const [isPreviousLanding, setIsPreviousLanding] = useState<boolean>(detectIsPreviousLanding);
 
   useEffect(() => {
     const handleUrlChange = () => {
-      setIsV2Landing(detectIsV2());
+      setIsPreviousLanding(detectIsPreviousLanding());
     };
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
@@ -427,15 +425,15 @@ function App() {
   return (
     <>
       {(view === 'landing' || view === 'onboarding') && (
-        isV2Landing ? (
-          <LandingPageV2 
+        isPreviousLanding ? (
+          <LandingPage 
             onStart={handleStart} 
             onLogin={handleLoginClick}
             onAdminAccess={() => setView('admin-login')} 
             hasExistingSession={hasExistingSession} 
           />
         ) : (
-          <LandingPage 
+          <LandingPageV2 
             onStart={handleStart} 
             onLogin={handleLoginClick}
             onAdminAccess={() => setView('admin-login')} 
