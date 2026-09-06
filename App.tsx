@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LandingPage } from './components/LandingPage';
+import { LandingPageV2 } from './components/LandingPageV2';
 import { OnboardingModal } from './components/OnboardingModal';
 import { Dashboard } from './components/Dashboard';
 import { LoginModal } from './components/LoginModal';
@@ -38,6 +39,42 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
+
+  // Detect if accessing the new landing page (V2) via path, search query, or hash
+  const detectIsV2 = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.toLowerCase();
+    return (
+      path.startsWith('/v2') || 
+      path.startsWith('/lp') || 
+      path.startsWith('/nueva') || 
+      path.startsWith('/conversion') ||
+      path.startsWith('/caso') ||
+      params.get('v') === '2' || 
+      params.get('lp') === '2' || 
+      params.get('version') === '2' || 
+      params.get('landing') === '2' ||
+      params.get('nueva') === 'true' ||
+      hash.includes('v2') ||
+      hash.includes('nueva')
+    );
+  };
+
+  const [isV2Landing, setIsV2Landing] = useState<boolean>(detectIsV2);
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsV2Landing(detectIsV2());
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
 
   // Detect payment return or session_id in URL upon mount or state changes
   useEffect(() => {
@@ -390,12 +427,21 @@ function App() {
   return (
     <>
       {(view === 'landing' || view === 'onboarding') && (
-        <LandingPage 
+        isV2Landing ? (
+          <LandingPageV2 
             onStart={handleStart} 
             onLogin={handleLoginClick}
             onAdminAccess={() => setView('admin-login')} 
             hasExistingSession={hasExistingSession} 
-        />
+          />
+        ) : (
+          <LandingPage 
+            onStart={handleStart} 
+            onLogin={handleLoginClick}
+            onAdminAccess={() => setView('admin-login')} 
+            hasExistingSession={hasExistingSession} 
+          />
+        )
       )}
 
       {showLoginModal && (
