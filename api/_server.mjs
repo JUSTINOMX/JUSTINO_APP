@@ -301,28 +301,35 @@ function renderMarkdown(md) {
       continue;
     }
     if (/^[-*]\s+/.test(trimmed)) {
-      closeTable();
-      if (!listOpen) {
-        out.push('<ul class="list-disc pl-6 my-4 space-y-1.5 text-slate-700">');
-        listOpen = true;
-      }
-      out.push(`<li>${inline(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
-      i++;
-      continue;
-    }
-    if (/^\d+\.\s+/.test(trimmed)) {
-      closeTable();
-      if (!listOpen) {
-        out.push('<ol class="list-decimal pl-6 my-4 space-y-1.5 text-slate-700">');
-        listOpen = true;
-      }
-      out.push(`<li>${inline(trimmed.replace(/^\d+\.\s+/, ""))}</li>`);
-      i++;
-      continue;
-    }
-    closeList();
-    closeTable();
-    out.push(`<p class="my-4 leading-relaxed text-slate-700">${inline(trimmed)}</p>`);
+          closeTable();
+          if (!listOpen) {
+            out.push('<ul class="list-disc pl-6 my-4 space-y-1.5 text-slate-700">');
+            listOpen = true;
+          }
+          out.push(`<li>${inline(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
+          i++;
+          continue;
+        }
+        if (/^\d+\.\s+/.test(trimmed)) {
+          closeTable();
+          if (!listOpen) {
+            out.push('<ol class="list-decimal pl-6 my-4 space-y-1.5 text-slate-700">');listOpen = true;
+          }
+          out.push(`<li>${inline(trimmed.replace(/^\d+\.\s+/, ""))}</li>`);
+          i++;
+          continue;
+        }
+        // Raw HTML passthrough for <details>/<summary> tags (collapsible FAQs)
+        if (/^<\/?(details|summary)\b/i.test(trimmed)) {
+          closeList();
+          closeTable();
+          out.push(trimmed);
+          i++;
+          continue;
+        }
+        closeList();
+        closeTable();
+        out.push(`<p class="my-4 leading-relaxed text-slate-700">${inline(trimmed)}</p>`);
     i++;
   }
   closeList();
@@ -559,8 +566,8 @@ ${cta}
 ${socialHtml}
 </article>`;
 }
-var heartSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
-var shareSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
+var heartSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
+var shareSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>`;
 function buildJsonLd(row) {
   const ld = [
     {
