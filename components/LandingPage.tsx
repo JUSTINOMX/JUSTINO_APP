@@ -328,6 +328,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
            </div>
            
            <div className="flex flex-wrap justify-center items-center gap-8 text-xs font-black uppercase tracking-widest text-slate-500">
+             <a href="/blog" className="hover:text-emerald-500 transition-colors">Blog</a>
              <button onClick={() => setShowPrivacy(true)} className="hover:text-emerald-500 transition-colors">Aviso de privacidad</button>
              <button onClick={() => setShowTerms(true)} className="hover:text-emerald-500 transition-colors">Términos y condiciones</button>
              <button onClick={() => setShowContact(true)} className="hover:text-emerald-500 transition-colors">CONTACTO</button>
