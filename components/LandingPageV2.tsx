@@ -20,6 +20,15 @@ import {
 } from 'lucide-react';
 import { Logo } from './Logo';
 
+// URLs públicas en Supabase Storage (CDN global de alta disponibilidad)
+const LANDING_IMAGES = {
+  hero: 'https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/landing/hero-justino.jpg',
+  dudas: 'https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/landing/dudas-justino.jpg',
+  continuidad: 'https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/landing/caso-continuidad.jpg',
+  mexico: 'https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/landing/mexico-contexto.jpg',
+  privacidad: 'https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/landing/privacidad-vault.jpg'
+};
+
 interface LandingPageV2Props {
   onStart: () => void;
   onLogin: () => void;
@@ -152,7 +161,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                 {/* Contenedor de la ilustración */}
                 <div className="relative rounded-[28px] overflow-hidden border border-white/10 bg-[#080D1A]/80 shadow-2xl backdrop-blur-sm group">
                   <img 
-                    src="/hero-justino.jpg" 
+                    src={LANDING_IMAGES.hero} 
                     alt="Justino - Asistente legal digital en México" 
                     referrerPolicy="no-referrer"
                     className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.02]"
@@ -201,7 +210,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                   {/* Contenedor de la ilustración */}
                   <div className="relative rounded-[28px] overflow-hidden border border-white/10 bg-[#080D1A]/90 shadow-2xl backdrop-blur-sm group">
                     <img 
-                      src="/dudas-justino.jpg" 
+                      src={LANDING_IMAGES.dudas} 
                       alt="Consultando dudas legales desde el celular" 
                       referrerPolicy="no-referrer"
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.02]"
@@ -548,7 +557,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                   {/* Contenedor de la ilustración */}
                   <div className="relative rounded-[26px] overflow-hidden border border-white/10 bg-[#080D1A]/90 shadow-2xl group">
                     <img 
-                      src="/caso-continuidad.jpg" 
+                      src={LANDING_IMAGES.continuidad} 
                       alt="Expediente organizado y continuidad del caso" 
                       referrerPolicy="no-referrer"
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.02]"
@@ -684,7 +693,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                   {/* Contenedor de la ilustración */}
                   <div className="relative rounded-[26px] overflow-hidden border border-white/10 bg-[#080D1A]/90 shadow-2xl group">
                     <img 
-                      src="/mexico-contexto.jpg" 
+                      src={LANDING_IMAGES.mexico} 
                       alt="Diseñado para el marco legal de México" 
                       referrerPolicy="no-referrer"
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.02]"
@@ -833,7 +842,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                   {/* Contenedor de la ilustración */}
                   <div className="relative rounded-[26px] overflow-hidden border border-white/10 bg-[#080D1A]/90 shadow-2xl group">
                     <img 
-                      src="/privacidad-vault.jpg" 
+                      src={LANDING_IMAGES.privacidad} 
                       alt="Privacidad y protección de tu caso" 
                       referrerPolicy="no-referrer"
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-[1.02]"
