@@ -149,10 +149,19 @@ export function renderMarkdown(md: string): string {
       continue;
     }
 
+    // Raw HTML passthrough for <details>/<summary> tags (collapsible FAQs)
+    if (/^<\/?(details|summary)\b/i.test(trimmed)) {
+      closeList();
+      closeTable();
+      out.push(trimmed);
+      i++;
+      continue;
+    }
+
     // Paragraph
     closeList();
     closeTable();
-    out.push(`<p class="my-4 leading-relaxed text-slate-700">${inline(trimmed)}</p>`);
+    out.push("<p class='my-4 leading-relaxed text-slate-700'>" + inline(trimmed) + "</p>");
     i++;
   }
   closeList();
