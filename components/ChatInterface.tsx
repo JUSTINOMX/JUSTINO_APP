@@ -31,14 +31,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (messages.length === 0) {
+      const displayName = user?.preferredName || user?.username;
+      const greeting = displayName ? `Hola **${displayName}**` : `Hola`;
       onNewMessage({
         id: 'welcome',
-        text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+        text: `${greeting}, bienvenido a tu expediente. Soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
         sender: 'bot',
         timestamp: new Date(),
       });
     }
-  }, [messages, onNewMessage]);
+  }, [messages, onNewMessage, user]);
 
   useEffect(() => {
     let interval: any;
@@ -106,7 +108,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
     }
 
     try {
-      const response = await sendMessageToJustino(currentInput, messages, currentAttachment || undefined);
+      const response = await sendMessageToJustino(
+        currentInput, 
+        messages, 
+        currentAttachment || undefined, 
+        user.preferredName || user.username
+      );
       
       // Parse for generated documents wrapped in [DOCUMENTO_OFICIAL: ... ]
       const docTagRegex = /\[DOCUMENTO_OFICIAL:\s*([\s\S]+?)\]/gi;
@@ -201,7 +208,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
     } catch (error: any) {
       onNewMessage({ 
         id: 'error-' + Date.now(), 
-        text: `Tengo una interferencia en el sistema. (${error.message || error})`, 
+        text: `Tuve una pequeña interrupción de conexión al procesar tu consulta. Por favor, reenvía tu último mensaje o indícame más detalles de tu situación para continuar con la estrategia jurídica de tu caso.`, 
         sender: 'bot', 
         timestamp: new Date() 
       });

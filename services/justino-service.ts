@@ -271,17 +271,20 @@ ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
 export const sendMessageToJustino = async (
   message: string, 
   history: Message[],
-  attachment?: Attachment
+  attachment?: Attachment,
+  userName?: string
 ): Promise<{text: string, sources: GroundingSource[]}> => {
   try {
     const headers = await getAuthHeaders();
+    const nameContext = userName ? `\n\nDATOS DEL CLIENTE:\nEl usuario con quien hablas prefiere que le llames "${userName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.` : '';
+    
     const response = await fetch("/api/v1/chat", {
       method: "POST",
       headers,
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [
-          { role: "system", content: SYSTEM_INSTRUCTION },
+          { role: "system", content: `${SYSTEM_INSTRUCTION}${nameContext}` },
           ...history.filter(m => m.id !== 'welcome' && m.id !== 'error').map(m => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             content: m.text

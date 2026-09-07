@@ -105,6 +105,23 @@ async function runMigration() {
     console.error("❌ Error inesperado durante la migración de 'documents':", err.message);
   }
 
+  // 3) Verificación de la tabla 'orders' para auditoría financiera
+  console.log("\n📦 [3/3] Verificando tabla 'orders' para auditoría de ventas y cupones...");
+  try {
+    const { data: existingOrders, error: ordersError } = await supabaseAdmin
+      .from('orders')
+      .select('id, amount_total, payment_method_type, is_real_revenue')
+      .limit(10);
+
+    if (ordersError) {
+      console.warn("⚠️ Nota: La tabla 'orders' aún no tiene todas las columnas nuevas o no existe. Ejecuta el script SQL 'supabase-orders-migration.sql' en el Editor SQL de Supabase.");
+    } else {
+      console.log(`✅ Tabla 'orders' accesible en Supabase. Detectados ${existingOrders?.length || 0} registros de prueba/producción.`);
+    }
+  } catch (ordersErr: any) {
+    console.warn("⚠️ Advertencia al verificar 'orders':", ordersErr.message);
+  }
+
   console.log("\n🎉 Proceso de migración finalizado exitosamente.");
 }
 

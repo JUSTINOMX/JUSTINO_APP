@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LandingPage } from './components/LandingPage';
+import { LandingPageV2 } from './components/LandingPageV2';
 import { OnboardingModal } from './components/OnboardingModal';
 import { Dashboard } from './components/Dashboard';
 import { LoginModal } from './components/LoginModal';
@@ -11,42 +12,91 @@ import { supabase } from './services/supabaseClient';
 import { config } from './config';
 import { uploadToVault } from './services/justino-service';
 
-const INITIAL_WELCOME_MESSAGE: Message = {
-  id: 'welcome',
-  text: `Hola, soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
-  sender: 'bot',
-  timestamp: new Date(),
+const createInitialWelcomeMessage = (preferredName?: string): Message => {
+  const displayName = preferredName ? preferredName.trim() : '';
+  const greeting = displayName ? `Hola **${displayName}**` : `Hola`;
+  return {
+    id: 'welcome',
+    text: `${greeting}, bienvenido a tu expediente. Soy Justino, tu guía legal digital. Te encuentras en un sitio blindado y seguro; tu información está protegida al 100% y nadie más que tú tiene acceso.\n\nMi objetivo es resolver tu situación legal de principio a fin. Yo me encargaré de explicarte tus opciones, generar cada documento que necesites y decirte exactamente dónde y cómo entregarlos para que tú mismo tomes el control de tu caso sin necesidad de intermediarios ni gastos excesivos.\n\nPara comenzar a trazar tu estrategia, cuéntame: ¿En qué ciudad te encuentras y qué situación legal vamos a solucionar hoy?`,
+    sender: 'bot',
+    timestamp: new Date(),
+  };
 };
 
 function App() {
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const hasSessionId = Boolean(urlParams?.get('session_id'));
+  const hasPaymentSuccess = Boolean(
+    urlParams?.get('session_id') || 
+    urlParams?.get('paid') || 
+    urlParams?.get('success') || 
+    urlParams?.get('payment')
+  );
 
-  const [view, setView] = useState<AppView>(hasSessionId ? 'onboarding' : 'landing');
+  const [view, setView] = useState<AppView>(hasPaymentSuccess ? 'onboarding' : 'landing');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState<number>(hasSessionId ? 2 : 1);
+  const [onboardingStep, setOnboardingStep] = useState<number>(hasPaymentSuccess ? 2 : 1);
   
   const [user, setUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
 
-  // Detect session_id in URL upon mount or state changes
+  // The new high-converting landing page (LandingPageV2) is now the DEFAULT for root (/) and /lp.
+  // The previous landing page remains preserved and accessible for traffic via /v1, /respaldo, /original, ?v=1, etc.
+  const detectIsPreviousLanding = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.toLowerCase();
+    return (
+      path.startsWith('/v1') || 
+      path.startsWith('/respaldo') || 
+      path.startsWith('/original') || 
+      path.startsWith('/antigua') ||
+      params.get('v') === '1' || 
+      params.get('version') === '1' || 
+      params.get('respaldo') === 'true' ||
+      hash.includes('v1') ||
+      hash.includes('respaldo')
+    );
+  };
+
+  const [isPreviousLanding, setIsPreviousLanding] = useState<boolean>(detectIsPreviousLanding);
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsPreviousLanding(detectIsPreviousLanding());
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
+  // Detect payment return or session_id in URL upon mount or state changes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get('session_id');
-    if (sessionId && !user) {
+    const isPaid = Boolean(
+      params.get('session_id') || 
+      params.get('paid') || 
+      params.get('success') || 
+      params.get('payment')
+    );
+    if (isPaid) {
       setView('onboarding');
       setOnboardingStep(2);
     }
-  }, [user]);
+  }, []);
 
   // Helper to ensure user profile & case record in Supabase
-  const ensureUserProfileAndCase = async (userId: string, email: string) => {
+  const ensureUserProfileAndCase = async (userId: string, email: string, preferredName?: string) => {
     if (!supabase) return;
     try {
       await supabase.from('profiles').upsert({
         id: userId,
         email: email,
+        display_name: preferredName || email.split('@')[0],
         has_active_access: true,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
@@ -61,7 +111,7 @@ function App() {
         await supabase.from('legal_cases').insert([{
           id: userId,
           user_id: userId,
-          title: 'Expediente Legal Principal',
+          title: `Expediente de ${preferredName || 'Principal'}`,
           case_type: 'general',
           status: 'active'
         }]);
@@ -76,22 +126,42 @@ function App() {
 
     // Supabase Auth Listener (The Single Source of Truth)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const params = new URLSearchParams(window.location.search);
+      const isPaidPending = Boolean(
+        params.get('session_id') || 
+        params.get('paid') || 
+        params.get('success') || 
+        params.get('payment')
+      );
+
+      // If user just returned from payment, do NOT auto-jump to dashboard: wait for them to submit username/password in onboarding modal
+      if (isPaidPending) {
+        return;
+      }
+
       if (session?.user) {
+        const userMeta = (session.user.user_metadata as any) || {};
+        const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_preferred_name') : '';
+        const preferredName = userMeta.preferred_name || storedPref || userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+        const cleanUsername = userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+
         const loggedUser: User = {
           id: session.user.id,
-          email: session.user.email || ''
+          email: session.user.email || '',
+          username: cleanUsername,
+          preferredName: preferredName
         };
         setUser(loggedUser);
         
         // Auto-provision profile and default case in Supabase
-        await ensureUserProfileAndCase(session.user.id, session.user.email || '');
+        await ensureUserProfileAndCase(session.user.id, session.user.email || '', preferredName);
 
         // Admin detection (Hint from session storage, but backend protects data)
         const isAdminSession = sessionStorage.getItem('justino_admin_active') === 'true';
         
         if (isAdminSession) {
            setView('admin-dashboard');
-        } else if (view === 'landing' || view === 'onboarding') {
+        } else if (view === 'landing') {
            setView('dashboard');
         }
       } else {
@@ -105,7 +175,7 @@ function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [view]);
 
   // Sincronización de datos del usuario (Cloud First)
   useEffect(() => {
@@ -122,7 +192,7 @@ function App() {
                 
                 if (msgs && !msgError) {
                     if (msgs.length === 0) {
-                        setMessages([INITIAL_WELCOME_MESSAGE]);
+                        setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
                     } else {
                         const formattedMessages: Message[] = msgs.map(m => ({
                             id: m.id || String(m.created_at),
@@ -132,6 +202,8 @@ function App() {
                         }));
                         setMessages(formattedMessages);
                     }
+                } else if (messages.length <= 1) {
+                    setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
                 }
 
                 const { data: files, error: fileError } = await supabase
@@ -182,13 +254,14 @@ function App() {
     setView('dashboard');
   };
 
-  const completeOnboarding = async (testUser?: User) => {
-    if (testUser) {
-      setUser(testUser);
-      if (testUser.id && testUser.email) {
-        await ensureUserProfileAndCase(testUser.id, testUser.email);
-      }
-    }
+  const completeOnboarding = (testUser?: User) => {
+    const activeUser = testUser || user || {
+      id: 'user_' + Date.now(),
+      email: 'usuario@justino.app',
+      username: 'usuario'
+    };
+    
+    setUser(activeUser);
     
     // Clear URL query parameters cleanly
     if (typeof window !== 'undefined' && window.location.search) {
@@ -196,25 +269,60 @@ function App() {
     }
 
     setView('dashboard');
+
+    if (activeUser.id && activeUser.email) {
+      ensureUserProfileAndCase(activeUser.id, activeUser.email).catch(console.warn);
+    }
   };
 
   const handleLogout = async () => {
-    sessionStorage.removeItem('justino_admin_active');
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      sessionStorage.removeItem('justino_admin_active');
+      sessionStorage.clear();
+      
+      // Clean up Supabase tokens from localStorage
+      if (typeof localStorage !== 'undefined') {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.includes('supabase') || key.startsWith('justino_session'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+
+      if (supabase) {
+        await supabase.auth.signOut().catch((err) => {
+          console.warn("Supabase signOut notice:", err);
+        });
+      }
+    } catch (err) {
+      console.warn("Logout error handled gracefully:", err);
+    } finally {
+      setUser(null);
+      setMessages([createInitialWelcomeMessage()]);
+      setVaultFiles([]);
+      setView('landing');
     }
-    setUser(null);
-    setMessages([INITIAL_WELCOME_MESSAGE]);
-    setVaultFiles([]);
-    setView('landing');
   };
 
   const handleAdminLogout = async () => {
-    sessionStorage.removeItem('justino_admin_active');
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      sessionStorage.removeItem('justino_admin_active');
+      sessionStorage.removeItem('hermes_admin_token');
+      sessionStorage.removeItem('hermes_operator');
+      sessionStorage.clear();
+      if (supabase) {
+        await supabase.auth.signOut().catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Admin logout notice:", err);
+    } finally {
+      setUser(null);
+      setShowLoginModal(false);
+      setView('landing');
     }
-    setView('landing');
   };
 
   const handleNewMessage = async (msg: Message) => {
@@ -317,12 +425,21 @@ function App() {
   return (
     <>
       {(view === 'landing' || view === 'onboarding') && (
-        <LandingPage 
+        isPreviousLanding ? (
+          <LandingPage 
             onStart={handleStart} 
             onLogin={handleLoginClick}
             onAdminAccess={() => setView('admin-login')} 
             hasExistingSession={hasExistingSession} 
-        />
+          />
+        ) : (
+          <LandingPageV2 
+            onStart={handleStart} 
+            onLogin={handleLoginClick}
+            onAdminAccess={() => setView('admin-login')} 
+            hasExistingSession={hasExistingSession} 
+          />
+        )
       )}
 
       {showLoginModal && (
@@ -337,9 +454,9 @@ function App() {
         />
       )}
 
-      {view === 'dashboard' && user && (
+      {view === 'dashboard' && (
         <Dashboard 
-          user={user} 
+          user={user || { id: 'user_active', email: 'usuario@justino.app', username: 'Usuario' }} 
           messages={messages} 
           vaultFiles={vaultFiles}
           onNewMessage={handleNewMessage}

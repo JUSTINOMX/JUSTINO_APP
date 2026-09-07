@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           price_data: {
             currency: "mxn",
             product: "prod_Tc8CPnxlKG0Yrm",
-            unit_amount: 40000, // $400.00 MXN
+            unit_amount: 48000, // $480.00 MXN
           },
           quantity: 1,
         },
