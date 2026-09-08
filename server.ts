@@ -907,7 +907,7 @@ app.post("/api/v1/stripe/create-checkout", async (req, res) => {
     if (!email) return res.status(400).json({ error: "El correo electrónico es requerido." });
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/eVqcN5bp2d739up9an1Nu04";
+    const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d";
     const paymentUrl = `${STRIPE_PAYMENT_LINK}?prefilled_email=${encodeURIComponent(cleanEmail)}`;
 
     res.json({ url: paymentUrl, success: true });

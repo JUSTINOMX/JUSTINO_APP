@@ -11,7 +11,7 @@ export const config = {
   // 3. Selecciona "Don't show confirmation page" (No mostrar página de confirmación).
   // 4. Selecciona "Redirect customers to your website" (Redirigir a tu sitio web).
   // 5. PEGA TU URL DE VERCEL AQUÍ: https://justino-mx.vercel.app/?success=true
-  stripePaymentLink: "https://buy.stripe.com/eVqcN5bp2d739up9an1Nu04", 
+  stripePaymentLink: "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d", 
 
   // 2. SUPABASE
   supabaseUrl: "https://msigkydllxgirspdjegm.supabase.co",

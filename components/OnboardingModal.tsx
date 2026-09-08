@@ -3,8 +3,9 @@ import { X, Check, Loader2, AlertCircle, Lock, Eye, EyeOff, User as UserIcon, Cr
 import { Logo } from './Logo';
 import { User } from '../types';
 import { supabase } from '../services/supabaseClient';
+import { config } from '../config';
 
-const STRIPE_PAYMENT_LINK_BASE = "https://buy.stripe.com/eVqcN5bp2d739up9an1Nu04";
+const STRIPE_PAYMENT_LINK_BASE = config?.stripePaymentLink || "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d";
 
 interface OnboardingModalProps {
   onComplete: (user?: User) => void;
