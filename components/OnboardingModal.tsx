@@ -285,7 +285,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                   <div className="bg-slate-50/80 p-4 sm:p-5 rounded-2xl border border-slate-100 text-xs sm:text-sm text-slate-700 space-y-3">
                     <div className="flex items-start gap-2.5">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" strokeWidth={2.5} />
-                      <span>Estrategia legal personalizada basada en leyes vigentes</span>
+                      <span>Asesoría legal personalizada basada en leyes vigentes</span>
                     </div>
                     <div className="flex items-start gap-2.5">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" strokeWidth={2.5} />
@@ -310,6 +310,17 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                 {/* RIGHT COLUMN: ACTION, EMAIL & AMAZON/PAYPAL YELLOW BUY BUTTON */}
                 <div className="md:col-span-6 flex flex-col justify-between space-y-4 md:border-l md:border-slate-100 md:pl-8 lg:pl-10">
                   <div className="space-y-4">
+                    {/* Imagen Ilustrativa Justino */}
+                    <div className="rounded-2xl overflow-hidden border border-slate-200/80 shadow-sm bg-slate-100">
+                      <img 
+                        src="https://msigkydllxgirspdjegm.supabase.co/storage/v1/object/public/justino-media/blog/te-presento-a-justino/hero.jpg" 
+                        alt="Te presento a Justino" 
+                        className="w-full h-32 sm:h-36 md:h-40 object-cover"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                    </div>
+
                     {/* Email Input for Invoice / Receipt */}
                     <div>
                       <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
@@ -388,19 +399,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                       <ArrowRight className="w-4 h-4 text-[#0F1111] group-hover:translate-x-1 transition-transform" />
                     </button>
 
-                    <div className="flex flex-col items-center gap-2 text-center pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setStep(2)}
-                        className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
-                      >
-                        ¿Ya realizaste tu pago? Haz clic aquí para activar tu usuario
-                      </button>
-
-                      <div className="flex md:hidden items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
-                        <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                        <span>Pago encriptado SSL de 256-bit por Stripe</span>
-                      </div>
+                    <div className="flex md:hidden items-center justify-center gap-2 text-slate-400 text-xs font-semibold pt-1">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      <span>Pago encriptado SSL de 256-bit por Stripe</span>
                     </div>
                   </div>
                 </div>

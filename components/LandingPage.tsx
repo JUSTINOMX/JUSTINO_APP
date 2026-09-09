@@ -49,18 +49,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
   const [showContact, setShowContact] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-clip">
       
       {/* Navbar */}
-      <nav className="container mx-auto px-6 py-8 flex justify-between items-center relative z-20">
-        <div className="flex items-center gap-3">
-          <Logo className="w-10 h-10" />
-          <span className="text-2xl font-bold tracking-tight">Justino</span>
-        </div>
-        <button onClick={onLogin} className="text-sm font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-widest">
-          {hasExistingSession ? "Acceder a mi caso" : "Acceder a mi caso"}
-        </button>
-      </nav>
+      <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#080D1A]/90 backdrop-blur-md shadow-md shadow-black/20">
+        <nav className="container mx-auto px-6 py-5 flex justify-between items-center relative z-20">
+          <div className="flex items-center gap-3">
+            <Logo className="w-10 h-10" />
+            <span className="text-2xl font-bold tracking-tight">Justino</span>
+          </div>
+          <button onClick={onLogin} className="text-sm font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-widest">
+            {hasExistingSession ? "Acceder a mi caso" : "Acceder a mi caso"}
+          </button>
+        </nav>
+      </header>
 
       {/* Hero Section */}
       <main className="relative z-10 flex flex-col items-center pt-16 pb-32 px-6">

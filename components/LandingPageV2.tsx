@@ -88,10 +88,10 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-clip">
       
       {/* NAVEGACIÓN FULL-WIDTH */}
-      <header className="border-b border-white/5 bg-[#080D1A]/90 backdrop-blur-md sticky top-0 z-40 w-full">
+      <header className="border-b border-white/10 bg-[#080D1A]/90 backdrop-blur-md sticky top-0 z-40 w-full shadow-md shadow-black/20">
         <div className="w-full max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Logo className="w-9 h-9" />
@@ -273,17 +273,14 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
           <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[160px] pointer-events-none -z-10" />
 
           <div className="w-full max-w-[1440px] mx-auto">
-            <div className="text-center max-w-4xl mx-auto mb-16">
+            <div className="text-center max-w-4xl mx-auto mb-14">
               <span className="text-xs font-black uppercase tracking-widest text-emerald-400 block mb-3">SITUACIÓN HABITUAL</span>
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
                 Si tienes un problema legal, probablemente te has preguntado...
               </h2>
-              <p className="text-slate-300 text-base sm:text-lg mt-4">
-                La incertidumbre y los términos complicados no deberían impedirte defender tus derechos.
-              </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center mb-16">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center mb-10">
               {/* Lado izquierdo: Ilustración en gran formato */}
               <div className="lg:col-span-5 relative flex items-center justify-center">
                 <div className="relative w-full">
@@ -340,6 +337,13 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
               </div>
             </div>
 
+            {/* Texto reflexivo ubicado debajo de las preguntas */}
+            <div className="text-center max-w-3xl mx-auto mb-10">
+              <p className="text-slate-300 text-base sm:text-lg leading-relaxed">
+                La incertidumbre y los términos complicados no deberían impedirte defender tus derechos.
+              </p>
+            </div>
+
             {/* Banner horizontal de llamado a la acción */}
             <div className="w-full bg-gradient-to-r from-emerald-500/10 via-white/[0.04] to-indigo-500/10 border border-white/10 rounded-3xl p-8 sm:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="text-center md:text-left">
@@ -357,6 +361,77 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
                 <span>Quiero contar mi caso</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        </section>
+
+        {/* CASOS Y PRUEBA SOCIAL DEMOSTRATIVA (SITUACIONES REALES) */}
+        <section className="w-full py-20 md:py-28 px-6 sm:px-10 lg:px-16 border-b border-white/5 bg-[#080D1A]/30">
+          <div className="w-full max-w-[1440px] mx-auto">
+            <div className="text-center mb-16 max-w-4xl mx-auto">
+              <span className="text-xs font-black uppercase tracking-widest text-emerald-400 block mb-3">APLICACIÓN REAL</span>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
+                Situaciones reales preparadas con Justino.
+              </h2>
+              <p className="text-slate-300 text-base sm:text-lg">
+                Ejemplos de cómo personas en México estructuran y resuelven sus dudas jurídicas cotidianas.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              
+              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Arrendamiento</span>
+                  <h3 className="text-lg font-bold text-white mb-3">Retención indebida de depósito</h3>
+                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                    El arrendador se negaba a devolver el depósito tras la entrega. Justino organizó el contrato, fotos de entrega y redactó la carta formal con término perentorio.
+                  </p>
+                </div>
+                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
+                  ✓ Requerimiento formal entregado
+                </div>
+              </div>
+
+              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Derecho Familiar</span>
+                  <h3 className="text-lg font-bold text-white mb-3">Pensión alimenticia para menores</h3>
+                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                    Dudas sobre montos de pensión y comprobantes admisibles. Justino organizó la relación de gastos mensuales y clasificó los comprobantes para el juzgado.
+                  </p>
+                </div>
+                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
+                  ✓ Relación de gastos estructurada
+                </div>
+              </div>
+
+              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Conflicto Laboral</span>
+                  <h3 className="text-lg font-bold text-white mb-3">Despido injustificado sin finiquito</h3>
+                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                    Propuesta patronal por debajo de ley. Justino calculó los conceptos de indemnización constitucional y preparó los puntos para la cita en el Centro de Conciliación.
+                  </p>
+                </div>
+                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
+                  ✓ Conciliación laboral preparada
+                </div>
+              </div>
+
+              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Deudas y Títulos</span>
+                  <h3 className="text-lg font-bold text-white mb-3">Cobro de pagaré con intereses abusivos</h3>
+                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
+                    Intereses moratorios desproporcionados. Justino analizó el documento conforme a la jurisprudencia de usura de la SCJN y preparó la propuesta de liquidación.
+                  </p>
+                </div>
+                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
+                  ✓ Propuesta con tope legal formulada
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -928,78 +1003,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
           </div>
         </section>
 
-        {/* 10 — CASOS Y PRUEBA SOCIAL DEMOSTRATIVA (4 COLUMNAS PANORÁMICAS) */}
-        <section className="w-full py-20 md:py-28 px-6 sm:px-10 lg:px-16 border-b border-white/5 bg-[#080D1A]/40">
-          <div className="w-full max-w-[1440px] mx-auto">
-            <div className="text-center mb-16 max-w-4xl mx-auto">
-              <span className="text-xs font-black uppercase tracking-widest text-emerald-400 block mb-3">APLICACIÓN REAL</span>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
-                Situaciones reales preparadas con Justino.
-              </h2>
-              <p className="text-slate-300 text-base sm:text-lg">
-                Ejemplos de cómo personas en México estructuran y resuelven sus dudas jurídicas cotidianas.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              
-              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Arrendamiento</span>
-                  <h3 className="text-lg font-bold text-white mb-3">Retención indebida de depósito</h3>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                    El arrendador se negaba a devolver el depósito tras la entrega. Justino organizó el contrato, fotos de entrega y redactó la carta formal con término perentorio.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
-                  ✓ Requerimiento formal entregado
-                </div>
-              </div>
-
-              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Derecho Familiar</span>
-                  <h3 className="text-lg font-bold text-white mb-3">Pensión alimenticia para menores</h3>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                    Dudas sobre montos de pensión y comprobantes admisibles. Justino organizó la relación de gastos mensuales y clasificó los comprobantes para el juzgado.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
-                  ✓ Relación de gastos estructurada
-                </div>
-              </div>
-
-              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Conflicto Laboral</span>
-                  <h3 className="text-lg font-bold text-white mb-3">Despido injustificado sin finiquito</h3>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                    Propuesta patronal por debajo de ley. Justino calculó los conceptos de indemnización constitucional y preparó los puntos para la cita en el Centro de Conciliación.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
-                  ✓ Conciliación laboral preparada
-                </div>
-              </div>
-
-              <div className="p-7 bg-white/[0.03] border border-white/10 rounded-3xl flex flex-col justify-between hover:border-emerald-500/30 transition-all">
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-2">Deudas y Títulos</span>
-                  <h3 className="text-lg font-bold text-white mb-3">Cobro de pagaré con intereses abusivos</h3>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                    Intereses moratorios desproporcionados. Justino analizó el documento conforme a la jurisprudencia de usura de la SCJN y preparó la propuesta de liquidación.
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-white/5 text-xs text-emerald-400 font-semibold">
-                  ✓ Propuesta con tope legal formulada
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        {/* 11 — PRECIO PANORÁMICO DE 2 COLUMNAS ($480 MXN) */}
+        {/* 10 — PRECIO PANORÁMICO DE 2 COLUMNAS ($480 MXN) */}
         <section className="w-full py-20 md:py-28 px-6 sm:px-10 lg:px-16 border-b border-white/5">
           <div className="w-full max-w-[1440px] mx-auto">
             <div className="p-8 sm:p-14 lg:p-16 rounded-3xl bg-gradient-to-r from-emerald-500/[0.06] via-white/[0.02] to-emerald-500/[0.03] border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.08)]">
@@ -1155,7 +1159,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
               <span className="text-base font-black tracking-tight text-white">Justino.app</span>
             </div>
             <span className="text-xs text-slate-400">
-              Desarrollado en México por <strong className="text-slate-300">NeuronConnect S.A.S. de C.V.</strong> · Tecnología al servicio de la comunidad
+              Desarrollado en México por <strong className="text-slate-300">NeuronConnect S.A.S.</strong> · Tecnología al servicio de la comunidad
             </span>
           </div>
           
@@ -1325,7 +1329,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
             </div>
             <div className="p-8 text-slate-300 space-y-6 text-base leading-relaxed">
               <p className="font-semibold text-white">
-                JUSTINO es una plataforma desarrollada en México por NeuronConnect S.A.S. de C.V.
+                JUSTINO es una plataforma desarrollada en México por NeuronConnect S.A.S.
               </p>
               <p>
                 Si tienes alguna consulta o requieres asistencia técnica, visítanos en <a href="https://www.neuronconnect.mx" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline font-bold">www.neuronconnect.mx</a> o contáctanos a través de nuestros canales oficiales.
