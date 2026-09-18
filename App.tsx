@@ -271,7 +271,7 @@ function App() {
     setView('dashboard');
 
     if (activeUser.id && activeUser.email) {
-      ensureUserProfileAndCase(activeUser.id, activeUser.email).catch(console.warn);
+      ensureUserProfileAndCase(activeUser.id, activeUser.email, activeUser.preferredName).catch(console.warn);
     }
   };
 

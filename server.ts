@@ -3,6 +3,7 @@ import path from "path";
 import cors from "cors";
 import { generateResponse } from "./services/ai-provider";
 import { setupBlogRoutes } from "./lib/blog";
+import { config } from "./config";
 import rateLimit from 'express-rate-limit';
 
 const app = express();
@@ -273,8 +274,9 @@ app.post("/api/v1/auth/register", async (req, res) => {
     const cleanEmail = payment_email ? String(payment_email).trim().toLowerCase() : '';
     const authEmail = `${cleanUsername}@justino.app`;
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || config.supabaseAnonKey;
 
     let userId = `user_${Date.now()}`;
 
@@ -333,6 +335,50 @@ app.post("/api/v1/auth/register", async (req, res) => {
         }, { onConflict: 'id' });
       } catch (dbErr) {
         console.warn("[AUTH REGISTER] Database sync warning:", dbErr);
+      }
+    } else if (supabaseUrl && anonKey) {
+      // Fallback with anon key if service role key is not configured in server env
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const clientSupabase = createClient(supabaseUrl, anonKey);
+        
+        const { data: signUpData, error: signUpErr } = await clientSupabase.auth.signUp({
+          email: authEmail,
+          password: cleanPassword,
+          options: {
+            data: {
+              username: cleanUsername,
+              preferred_name: cleanPreferredName,
+              payment_email: cleanEmail
+            }
+          }
+        });
+
+        if (signUpData?.user) {
+          userId = signUpData.user.id;
+        }
+
+        try {
+          await clientSupabase.from('profiles').upsert({
+            id: userId,
+            email: cleanEmail || authEmail,
+            display_name: cleanPreferredName,
+            has_active_access: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        } catch (_) {}
+
+        try {
+          await clientSupabase.from('legal_cases').upsert({
+            id: userId,
+            user_id: userId,
+            title: `Expediente de ${cleanPreferredName || cleanUsername}`,
+            case_type: 'general',
+            status: 'active'
+          }, { onConflict: 'id' });
+        } catch (_) {}
+      } catch (anonErr) {
+        console.warn("[AUTH REGISTER] Anon fallback exception:", anonErr);
       }
     }
 
@@ -903,17 +949,87 @@ app.post("/api/v1/chat", authMiddleware, aiLimiter, chatHandler);
 
 app.post("/api/v1/stripe/create-checkout", async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, origin: clientOrigin } = req.body;
     if (!email) return res.status(400).json({ error: "El correo electrónico es requerido." });
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d";
-    const paymentUrl = `${STRIPE_PAYMENT_LINK}?prefilled_email=${encodeURIComponent(cleanEmail)}`;
+    const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || config.stripePaymentLink || "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d";
+    
+    // Determine the base origin to redirect back to dynamically
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const proto = req.headers["x-forwarded-proto"] || "https";
+    const origin = clientOrigin || req.headers.origin || `${proto}://${host}`;
 
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (stripeKey && !stripeKey.includes('placeholder') && !stripeKey.includes('sk_test_...')) {
+      try {
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(stripeKey.trim());
+
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          customer_email: cleanEmail,
+          allow_promotion_codes: true,
+          line_items: [
+            {
+              price_data: {
+                currency: "mxn",
+                product_data: {
+                  name: "Expediente Legal Justino",
+                  description: "Asesoría legal personalizada basada en leyes vigentes",
+                },
+                unit_amount: 48000, // $480.00 MXN
+              },
+              quantity: 1,
+            },
+          ],
+          mode: "payment",
+          success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}&success=true`,
+          cancel_url: `${origin}/`,
+          metadata: {
+            email: cleanEmail
+          }
+        });
+
+        return res.json({ url: session.url, session_id: session.id, success: true });
+      } catch (stripeErr) {
+        console.warn("[STRIPE CHECKOUT] Session create fallback to payment link:", stripeErr);
+      }
+    }
+
+    const paymentUrl = `${STRIPE_PAYMENT_LINK}?prefilled_email=${encodeURIComponent(cleanEmail)}`;
     res.json({ url: paymentUrl, success: true });
   } catch (error: any) {
     console.error("Stripe Checkout Error:", error);
     res.status(500).json({ error: error.message || "Error al conectar con Stripe." });
+  }
+});
+
+app.get("/api/v1/stripe/session-info", async (req, res) => {
+  try {
+    const sessionId = req.query.session_id as string;
+    if (!sessionId) return res.status(400).json({ error: "Missing session_id" });
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey || stripeKey.includes('placeholder') || stripeKey.includes('sk_test_...')) {
+      return res.json({ success: false, message: "No stripe key configured" });
+    }
+
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(stripeKey.trim());
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    const email = session.customer_details?.email || session.customer_email || (session.metadata?.email as string) || null;
+    const name = session.customer_details?.name || null;
+
+    res.json({
+      success: true,
+      email,
+      name,
+      payment_status: session.payment_status
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

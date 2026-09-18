@@ -16,7 +16,14 @@ interface OnboardingModalProps {
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, onClose, initialStep = 1 }) => {
   // Check URL parameters for active session or return from payment
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const isPaidReturn = urlParams?.has('session_id') || urlParams?.has('paid') || urlParams?.has('success') || initialStep === 3;
+  const isPaidReturn = Boolean(
+    urlParams?.has('session_id') || 
+    urlParams?.has('paid') || 
+    urlParams?.has('success') || 
+    urlParams?.has('payment') || 
+    initialStep === 2 || 
+    initialStep === 3
+  );
   const savedPaymentEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
 
   const [step, setStep] = useState<number>(isPaidReturn ? 2 : 1);
@@ -36,7 +43,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
   useEffect(() => {
     if (isPaidReturn) {
       setStep(2);
-      const storedEmail = sessionStorage.getItem('justino_payment_email') || '';
+      const storedEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
       if (storedEmail) {
         setEmailForPayment(storedEmail);
         const suggested = storedEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '');
@@ -44,11 +51,34 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
           setUsername(suggested);
         }
       }
+
+      // If user returned with session_id, retrieve customer email from Stripe session
+      const sessionId = urlParams?.get('session_id');
+      if (sessionId && !storedEmail) {
+        fetch(`/api/v1/stripe/session-info?session_id=${encodeURIComponent(sessionId)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data?.email) {
+              setEmailForPayment(data.email);
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('justino_payment_email', data.email);
+              }
+              const suggested = data.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+              if (suggested && !username) {
+                setUsername(suggested);
+              }
+              if (data.name && !preferredName) {
+                setPreferredName(data.name.split(' ')[0]);
+              }
+            }
+          })
+          .catch(err => console.warn("Could not fetch stripe session info:", err));
+      }
     }
   }, [isPaidReturn]);
 
-  // Handle Redirection to Stripe Payment Link
-  const handleProceedToStripe = (e: React.FormEvent) => {
+  // Handle Redirection to Stripe (Dynamic Session with dynamic return URL, or Payment Link fallback)
+  const handleProceedToStripe = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -68,20 +98,42 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       sessionStorage.setItem('justino_payment_email', targetEmail);
     }
 
-    const fullStripeUrl = `${STRIPE_PAYMENT_LINK_BASE}?prefilled_email=${encodeURIComponent(targetEmail)}`;
-    setDirectStripeUrl(fullStripeUrl);
     setIsRedirecting(true);
+
+    let checkoutUrl = `${STRIPE_PAYMENT_LINK_BASE}?prefilled_email=${encodeURIComponent(targetEmail)}`;
+
+    try {
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch('/api/v1/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          origin: currentOrigin
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.url) {
+          checkoutUrl = data.url;
+        }
+      }
+    } catch (apiErr) {
+      console.warn("Using fallback Stripe link:", apiErr);
+    }
+
+    setDirectStripeUrl(checkoutUrl);
 
     // Try multiple navigation methods to bypass iframe restrictions
     try {
       if (window.top && window.top !== window.self) {
-        window.top.location.href = fullStripeUrl;
+        window.top.location.href = checkoutUrl;
       } else {
-        window.location.href = fullStripeUrl;
+        window.location.href = checkoutUrl;
       }
     } catch (err) {
       // If cross-origin iframe security prevents top navigation, open in new tab
-      window.open(fullStripeUrl, '_blank', 'noopener,noreferrer');
+      window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
