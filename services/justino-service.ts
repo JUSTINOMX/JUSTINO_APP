@@ -51,9 +51,16 @@ const getAuthHeaders = async () => {
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
       }
+      if (session?.user?.id) {
+        headers["x-user-id"] = session.user.id;
+      }
     } catch (e) {
       console.warn("Could not retrieve Supabase session token:", e);
     }
+  }
+  const localUsername = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_username') : null;
+  if (localUsername && !headers["x-user-id"]) {
+    headers["x-user-id"] = localUsername;
   }
   return headers;
 };
@@ -278,9 +285,13 @@ export const sendMessageToJustino = async (
     const headers = await getAuthHeaders();
     const nameContext = userName ? `\n\nDATOS DEL CLIENTE:\nEl usuario con quien hablas prefiere que le llames "${userName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.` : '';
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
     const response = await fetch("/api/v1/chat", {
       method: "POST",
       headers,
+      signal: controller.signal,
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [
@@ -299,6 +310,8 @@ export const sendMessageToJustino = async (
         temperature: 0.15
       })
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");

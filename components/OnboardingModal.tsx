@@ -172,8 +172,46 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
     }
 
     try {
-      // 1. Call server API to create/update user with admin rights (bypasses email confirmation requirement)
       let registeredUser: User | null = null;
+      let activeUserId: string | null = null;
+
+      // 1. Direct authentication with Supabase Client
+      if (supabase) {
+        try {
+          // A) Try to sign up first
+          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+            email: authEmail,
+            password: targetPassword,
+            options: {
+              data: {
+                username: cleanUsername,
+                preferred_name: cleanPreferredName,
+                payment_email: targetPaymentEmail
+              }
+            }
+          });
+
+          if (signUpData?.user) {
+            activeUserId = signUpData.user.id;
+          }
+
+          // B) If user already exists or session is needed, sign in
+          if (!activeUserId || !signUpData?.session) {
+            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: targetPassword
+            });
+
+            if (signInData?.user) {
+              activeUserId = signInData.user.id;
+            }
+          }
+        } catch (clientAuthErr) {
+          console.warn("Client Supabase direct auth attempt:", clientAuthErr);
+        }
+      }
+
+      // 2. Call server API to register and provision in backend (admin bypass)
       try {
         const regRes = await fetch('/api/v1/auth/register', {
           method: 'POST',
@@ -187,64 +225,51 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
         });
         if (regRes.ok) {
           const regJson = await regRes.json();
-          if (regJson.user) {
-            registeredUser = {
-              id: regJson.user.id,
-              email: regJson.user.email || authEmail,
-              username: cleanUsername,
-              preferredName: cleanPreferredName
-            };
+          if (regJson.user?.id) {
+            if (!activeUserId) activeUserId = regJson.user.id;
           }
         }
       } catch (backendErr) {
         console.warn("Backend register fetch exception:", backendErr);
       }
 
-      // 2. Log in with Supabase client
-      if (supabase) {
+      // 3. Guarantee user profile and case in Supabase with all database constraints satisfied
+      if (supabase && activeUserId) {
         try {
-          const { data: signData, error: signErr } = await supabase.auth.signInWithPassword({
-            email: authEmail,
-            password: targetPassword
-          });
+          await supabase.from('profiles').upsert({
+            id: activeUserId,
+            email: targetPaymentEmail || authEmail,
+            display_name: cleanPreferredName,
+            username: cleanUsername,
+            has_active_access: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
 
-          if (!signErr && signData?.user) {
-            registeredUser = {
-              id: signData.user.id,
-              email: targetPaymentEmail || signData.user.email || authEmail,
-              username: cleanUsername,
-              preferredName: cleanPreferredName
-            };
-          } else if (signErr) {
-            // Fallback direct sign up
-            const { data: signUpData } = await supabase.auth.signUp({
-              email: authEmail,
-              password: targetPassword,
-              options: {
-                data: {
-                  username: cleanUsername,
-                  preferred_name: cleanPreferredName,
-                  payment_email: targetPaymentEmail
-                }
-              }
-            });
-            if (signUpData?.user) {
-              registeredUser = {
-                id: signUpData.user.id,
-                email: targetPaymentEmail || authEmail,
-                username: cleanUsername,
-                preferredName: cleanPreferredName
-              };
-            }
+          const { data: existingCases } = await supabase
+            .from('legal_cases')
+            .select('id')
+            .eq('user_id', activeUserId)
+            .limit(1);
+
+          if (!existingCases || existingCases.length === 0) {
+            await supabase.from('legal_cases').insert([{
+              user_id: activeUserId,
+              title: `Expediente de ${cleanPreferredName}`,
+              case_type: 'general',
+              status: 'active',
+              state_jurisdiction: 'Nacional / Por definir',
+              city_jurisdiction: 'Por definir',
+              updated_at: new Date().toISOString()
+            }]);
           }
-        } catch (supabaseAuthErr) {
-          console.warn("Client Supabase auth attempt:", supabaseAuthErr);
+        } catch (dbErr) {
+          console.warn("Direct Supabase profile/case initialization:", dbErr);
         }
       }
 
-      // 3. Guarantee user state & proceed
-      const finalUser: User = registeredUser || {
-        id: 'user_' + cleanUsername,
+      // 4. Construct guaranteed user object
+      const finalUser: User = {
+        id: activeUserId || ('user_' + cleanUsername),
         email: targetPaymentEmail || authEmail,
         username: cleanUsername,
         preferredName: cleanPreferredName
@@ -255,11 +280,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
-      // Trigger completion callback
+      // Trigger completion callback to proceed into Justino's chat
       onComplete(finalUser);
     } catch (err: any) {
       console.error("Auth Register Exception:", err);
-      // Fallback transition so user is never stuck
       const fallbackUser: User = {
         id: 'user_' + cleanUsername,
         email: targetPaymentEmail || authEmail,

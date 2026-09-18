@@ -82,96 +82,15 @@ export async function generateResponse(userMessages: any[]) {
     ...userMessages.filter(m => m.role === 'user' || m.role === 'assistant').slice(-12)
   ];
 
-  const hasDeepSeek = Boolean(deepseekKey && deepseekKey.trim().length > 5);
-  const hasMoonshot = Boolean(moonshotKey && moonshotKey.trim().length > 5);
+  const hasDeepSeek = Boolean(deepseekKey && deepseekKey.trim().length > 10 && !deepseekKey.includes('placeholder'));
+  const hasMoonshot = Boolean(moonshotKey && moonshotKey.trim().length > 10 && !moonshotKey.includes('placeholder'));
   const hasGemini = Boolean(geminiKey && geminiKey.trim().length > 5);
 
-  // 1. Intentar con DeepSeek (Prioridad 1 - Default)
-  if (hasDeepSeek) {
+  // Helper for fast Gemini generation
+  const tryGemini = async () => {
+    if (!hasGemini) return null;
     try {
-      const sanitizedKey = deepseekKey!.trim();
-      console.log(`[AI Provider] Solicitando inferencia a DeepSeek (Default)...`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${sanitizedKey}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: secureMessages,
-          temperature: 0.25,
-          max_tokens: 4000
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const json = await response.json();
-        if (json?.choices?.[0]?.message?.content) {
-          console.log("[AI Provider] Respuesta generada exitosamente con DeepSeek.");
-          return json;
-        }
-      }
-      
-      const errText = await response.text().catch(() => "");
-      console.warn(`[AI Provider] DeepSeek no disponible (${response.status}): ${errText.substring(0, 100)}. Pasando silenciosamente a Kimi...`);
-    } catch (error: any) {
-      console.warn(`[AI Provider] Error/Timeout con DeepSeek (${error.message}). Pasando silenciosamente a Kimi...`);
-    }
-  }
-
-  // 2. Fallback a Kimi / Moonshot (Prioridad 2 - Respaldo)
-  if (hasMoonshot) {
-    try {
-      const sanitizedKey = moonshotKey!.trim();
-      console.log("[AI Provider] Solicitando inferencia a Kimi / Moonshot (Respaldo)...");
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${sanitizedKey}`
-        },
-        body: JSON.stringify({
-          model: "moonshot-v1-8k",
-          messages: secureMessages,
-          temperature: 0.25,
-          max_tokens: 4000
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const json = await response.json();
-        if (json?.choices?.[0]?.message?.content) {
-          console.log("[AI Provider] Respuesta generada exitosamente con Kimi / Moonshot.");
-          return json;
-        }
-      }
-      
-      const errText = await response.text().catch(() => "");
-      console.warn(`[AI Provider] Kimi/Moonshot no disponible (${response.status}): ${errText.substring(0, 100)}. Pasando silenciosamente a Gemini...`);
-    } catch (error: any) {
-      console.warn(`[AI Provider] Error/Timeout con Kimi (${error.message}). Pasando silenciosamente a Gemini...`);
-    }
-  }
-
-  // 3. Fallback a Gemini (Prioridad 3 - Respaldo Adicional)
-  if (hasGemini) {
-    try {
-      console.log("[AI Provider] Solicitando inferencia a Gemini...");
+      console.log("[AI Provider] Solicitando inferencia ultra-rápida a Gemini...");
       const genAI = new GoogleGenAI({
         apiKey: geminiKey!.trim(),
         httpOptions: {
@@ -185,18 +104,31 @@ export async function generateResponse(userMessages: any[]) {
       const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
 
       for (const m of chatMessages) {
-        contents.push({
-          role: m.role === 'user' ? 'user' : 'model',
-          parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }]
-        });
+        const role = m.role === 'user' ? 'user' : 'model';
+        const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        
+        // Merge consecutive messages of the same role to strictly adhere to turn alternation
+        if (contents.length > 0 && contents[contents.length - 1].role === role) {
+          contents[contents.length - 1].parts[0].text += `\n\n${text}`;
+        } else {
+          contents.push({
+            role,
+            parts: [{ text }]
+          });
+        }
       }
 
       if (contents.length === 0 || contents[0].role !== 'user') {
         contents.unshift({ role: 'user', parts: [{ text: 'Hola Justino' }] });
       }
 
-      // Valid current Gemini models
-      const modelsToTry = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"];
+      // High-performance models with thinkingBudget: 0 for instant legal guidance
+      const modelsToTry = [
+        "gemini-3.1-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-latest"
+      ];
       
       for (const modelName of modelsToTry) {
         try {
@@ -206,6 +138,7 @@ export async function generateResponse(userMessages: any[]) {
             config: {
               systemInstruction: JUSTINO_SYSTEM_PROMPT,
               temperature: 0.25,
+              thinkingConfig: { thinkingBudget: 0 }
             }
           });
           const text = result.text || result.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -219,12 +152,102 @@ export async function generateResponse(userMessages: any[]) {
             };
           }
         } catch (gErr: any) {
-          console.warn(`[AI Provider] Gemini (${modelName}) error:`, gErr?.message || gErr);
+          console.warn(`[AI Provider] Gemini (${modelName}) intento fallido:`, gErr?.message || gErr);
         }
       }
     } catch (error: any) {
       console.warn("[AI Provider] Gemini general error:", error?.message || error);
     }
+    return null;
+  };
+
+  // 1. PRIORIDAD 1 (DEFAULT): DeepSeek
+  if (hasDeepSeek) {
+    try {
+      const sanitizedKey = deepseekKey!.trim();
+      console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek (Default)...`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+      const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sanitizedKey}`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: secureMessages,
+          temperature: 0.25,
+          max_tokens: 3500
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json?.choices?.[0]?.message?.content) {
+          console.log("[AI Provider] Respuesta generada exitosamente con DeepSeek.");
+          return json;
+        }
+      } else {
+        const errText = await response.text().catch(() => "");
+        console.warn(`[AI Provider] DeepSeek devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Kimi / Moonshot...`);
+      }
+    } catch (error: any) {
+      console.warn(`[AI Provider] Error o timeout con DeepSeek (${error.message}). Pasando a Kimi / Moonshot...`);
+    }
+  }
+
+  // 2. PRIORIDAD 2 (RESPALDO): Kimi / Moonshot
+  if (hasMoonshot) {
+    try {
+      const sanitizedKey = moonshotKey!.trim();
+      console.log("[AI Provider] [2/3] Solicitando inferencia a Kimi / Moonshot (Respaldo)...");
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sanitizedKey}`
+        },
+        body: JSON.stringify({
+          model: "moonshot-v1-8k",
+          messages: secureMessages,
+          temperature: 0.25,
+          max_tokens: 3500
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json?.choices?.[0]?.message?.content) {
+          console.log("[AI Provider] Respuesta generada exitosamente con Kimi / Moonshot.");
+          return json;
+        }
+      } else {
+        const errText = await response.text().catch(() => "");
+        console.warn(`[AI Provider] Kimi / Moonshot devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Gemini...`);
+      }
+    } catch (error: any) {
+      console.warn(`[AI Provider] Error o timeout con Kimi / Moonshot (${error.message}). Pasando a Gemini...`);
+    }
+  }
+
+  // 3. PRIORIDAD 3 (RESPALDO ADICIONAL): Gemini
+  if (hasGemini) {
+    console.log("[AI Provider] [3/3] Solicitando inferencia a Gemini (Respaldo adicional)...");
+    const geminiResult = await tryGemini();
+    if (geminiResult) return geminiResult;
   }
 
   // Fallback seguro en caso de que todos los proveedores externos estén inaccesibles
@@ -232,7 +255,7 @@ export async function generateResponse(userMessages: any[]) {
   return {
     choices: [{
       message: {
-        content: "Comprendo perfectamente la situación que me expones. En este momento estoy realizando una comprobación en el sistema para brindarte la mejor estrategia jurídica. Por favor, continúa indicándome los datos de tu caso o reenvía tu último mensaje para continuar con tu trámite."
+        content: "Comprendo perfectamente la situación legal que me planteas. Para darte la mejor estrategia paso a paso bajo el marco jurídico aplicable, ¿podrías indicarme en qué estado de la República Mexicana te encuentras y si cuentas con algún documento o comprobante previo relacionado con este asunto?"
       },
       finish_reason: "stop"
     }]

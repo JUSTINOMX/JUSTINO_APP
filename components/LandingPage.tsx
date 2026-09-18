@@ -49,10 +49,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
   const [showContact, setShowContact] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-clip">
+    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30">
       
       {/* Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#080D1A]/90 backdrop-blur-md shadow-md shadow-black/20">
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#080D1A]/95 backdrop-blur-md shadow-lg shadow-black/30">
         <nav className="container mx-auto px-6 py-5 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-3">
             <Logo className="w-10 h-10" />
@@ -65,7 +65,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart, onLogin, onAd
       </header>
 
       {/* Hero Section */}
-      <main className="relative z-10 flex flex-col items-center pt-16 pb-32 px-6">
+      <main className="relative z-10 flex flex-col items-center pt-16 pb-32 px-6 overflow-x-hidden">
         <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center mb-12 border border-emerald-500/30 shadow-[0_0_50px_rgba(16,185,129,0.2)]">
           <Logo className="w-12 h-12" />
         </div>

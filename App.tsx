@@ -93,10 +93,27 @@ function App() {
   const ensureUserProfileAndCase = async (userId: string, email: string, preferredName?: string) => {
     if (!supabase) return;
     try {
+      let targetUserId = userId;
+      const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId);
+      if (!isValidUuid) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          targetUserId = session.user.id;
+        } else {
+          console.warn("Skipping direct profile upsert for non-UUID temporary user:", targetUserId);
+          return;
+        }
+      }
+
+      const cleanUsername = preferredName 
+        ? preferredName.toLowerCase().replace(/[^a-z0-9_.-]/g, '')
+        : (email ? email.split('@')[0] : 'usuario');
+
       await supabase.from('profiles').upsert({
-        id: userId,
+        id: targetUserId,
         email: email,
         display_name: preferredName || email.split('@')[0],
+        username: cleanUsername,
         has_active_access: true,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
@@ -104,16 +121,18 @@ function App() {
       const { data: existingCases } = await supabase
         .from('legal_cases')
         .select('id')
-        .eq('user_id', userId)
+        .eq('user_id', targetUserId)
         .limit(1);
 
       if (!existingCases || existingCases.length === 0) {
         await supabase.from('legal_cases').insert([{
-          id: userId,
-          user_id: userId,
+          user_id: targetUserId,
           title: `Expediente de ${preferredName || 'Principal'}`,
           case_type: 'general',
-          status: 'active'
+          status: 'active',
+          state_jurisdiction: 'Nacional / Por definir',
+          city_jurisdiction: 'Por definir',
+          updated_at: new Date().toISOString()
         }]);
       }
     } catch (err) {

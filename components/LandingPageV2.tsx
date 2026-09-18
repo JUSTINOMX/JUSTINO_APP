@@ -88,10 +88,10 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30 overflow-x-clip">
+    <div className="min-h-screen bg-[#0A0F1E] text-white font-sans selection:bg-emerald-500/30">
       
       {/* NAVEGACIÓN FULL-WIDTH */}
-      <header className="border-b border-white/10 bg-[#080D1A]/90 backdrop-blur-md sticky top-0 z-40 w-full shadow-md shadow-black/20">
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#080D1A]/95 backdrop-blur-md shadow-lg shadow-black/30">
         <div className="w-full max-w-[1440px] mx-auto px-6 sm:px-10 lg:px-16 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Logo className="w-9 h-9" />
@@ -125,7 +125,7 @@ export const LandingPageV2: React.FC<LandingPageV2Props> = ({
         </div>
       </header>
 
-      <main className="relative z-10 w-full">
+      <main className="relative z-10 w-full overflow-x-hidden">
 
         {/* 01 — HERO PANORÁMICO ESTILO BRAIN.FM */}
         <section className="relative w-full pt-12 md:pt-20 pb-16 md:pb-24 px-6 sm:px-10 lg:px-16 overflow-hidden">
