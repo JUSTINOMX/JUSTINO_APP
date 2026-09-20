@@ -143,7 +143,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
     }
   };
 
-  // Handle Supabase Registration (Preferred Name + Username + Password)
+  // Handle Registration (Preferred Name + Username + Password)
   const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -179,45 +179,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
 
     try {
       let registeredUser: User | null = null;
-      let activeUserId: string | null = null;
 
-      // 1. Direct authentication with Supabase Client
-      if (supabase) {
-        try {
-          // A) Try to sign up first
-          const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-            email: authEmail,
-            password: targetPassword,
-            options: {
-              data: {
-                username: cleanUsername,
-                preferred_name: cleanPreferredName,
-                payment_email: targetPaymentEmail
-              }
-            }
-          });
+      // Call server API directly (has service_role key to bypass client RLS & iframe lock issues)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-          if (signUpData?.user) {
-            activeUserId = signUpData.user.id;
-          }
-
-          // B) If user already exists or session is needed, sign in
-          if (!activeUserId || !signUpData?.session) {
-            const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-              email: authEmail,
-              password: targetPassword
-            });
-
-            if (signInData?.user) {
-              activeUserId = signInData.user.id;
-            }
-          }
-        } catch (clientAuthErr) {
-          console.warn("Client Supabase direct auth attempt:", clientAuthErr);
-        }
-      }
-
-      // 2. Call server API to register and provision in backend (admin bypass)
       try {
         const regRes = await fetch('/api/v1/auth/register', {
           method: 'POST',
@@ -227,66 +193,52 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             preferred_name: cleanPreferredName,
             password: targetPassword,
             payment_email: targetPaymentEmail
-          })
+          }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+
         if (regRes.ok) {
           const regJson = await regRes.json();
-          if (regJson.user?.id) {
-            if (!activeUserId) activeUserId = regJson.user.id;
+          if (regJson.user) {
+            registeredUser = {
+              id: regJson.user.id || ('user_' + cleanUsername),
+              email: regJson.user.email || targetPaymentEmail || authEmail,
+              username: regJson.user.username || cleanUsername,
+              preferredName: regJson.user.preferredName || cleanPreferredName
+            };
           }
         }
       } catch (backendErr) {
-        console.warn("Backend register fetch exception:", backendErr);
+        clearTimeout(timeoutId);
+        console.warn("Backend register fetch warning (fallback active):", backendErr);
       }
 
-      // 3. Guarantee user profile and case in Supabase with all database constraints satisfied
-      if (supabase && activeUserId) {
-        try {
-          await supabase.from('profiles').upsert({
-            id: activeUserId,
-            email: targetPaymentEmail || authEmail,
-            display_name: cleanPreferredName,
-            username: cleanUsername,
-            has_active_access: true,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'id' });
-
-          const { data: existingCases } = await supabase
-            .from('legal_cases')
-            .select('id')
-            .eq('user_id', activeUserId)
-            .limit(1);
-
-          if (!existingCases || existingCases.length === 0) {
-            await supabase.from('legal_cases').insert([{
-              user_id: activeUserId,
-              title: `Expediente de ${cleanPreferredName}`,
-              case_type: 'general',
-              status: 'active',
-              state_jurisdiction: 'Nacional / Por definir',
-              city_jurisdiction: 'Por definir',
-              updated_at: new Date().toISOString()
-            }]);
-          }
-        } catch (dbErr) {
-          console.warn("Direct Supabase profile/case initialization:", dbErr);
-        }
-      }
-
-      // 4. Construct guaranteed user object
-      const finalUser: User = {
-        id: activeUserId || ('user_' + cleanUsername),
+      // Guaranteed user object
+      const finalUser: User = registeredUser || {
+        id: 'user_' + cleanUsername,
         email: targetPaymentEmail || authEmail,
         username: cleanUsername,
         preferredName: cleanPreferredName
       };
+
+      // Non-blocking background client sign-in attempt (won't freeze if iframe locks fail)
+      if (supabase) {
+        supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: targetPassword
+        }).catch(err => {
+          console.warn("Background client auth sign-in notice:", err);
+        });
+      }
 
       // Clean URL params from payment return
       if (typeof window !== 'undefined' && window.location.search) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
-      // Trigger completion callback to proceed into Justino's chat
+      setIsRegistering(false);
+      // Immediately open the case conversation in Dashboard
       onComplete(finalUser);
     } catch (err: any) {
       console.error("Auth Register Exception:", err);
@@ -299,9 +251,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
       if (typeof window !== 'undefined' && window.location.search) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
-      onComplete(fallbackUser);
-    } finally {
       setIsRegistering(false);
+      onComplete(fallbackUser);
     }
   };
 

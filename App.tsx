@@ -180,7 +180,7 @@ function App() {
         
         if (isAdminSession) {
            setView('admin-dashboard');
-        } else if (view === 'landing') {
+        } else if (view === 'landing' || view === 'onboarding') {
            setView('dashboard');
         }
       } else {
@@ -254,7 +254,9 @@ function App() {
 
   const handleStart = () => {
     setView('onboarding');
-    setOnboardingStep(1);
+    // Modo de prueba temporal: el pago de Stripe está deshabilitado para pruebas de uso
+    // Al hacer clic en empezar mi caso, lleva directamente a la creación de usuario
+    setOnboardingStep(2);
   };
 
   const handleLoginClick = () => {
