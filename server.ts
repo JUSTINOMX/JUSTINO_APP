@@ -12,17 +12,55 @@ const PORT = 3000;
 // trust proxy is important for Cloud Run/container environments to get real user IP
 app.set('trust proxy', 1);
 
+// Middleware to ensure socket and connection exist in all environments (Vercel, Lambda, Cloud Run)
+app.use((req, res, next) => {
+  if (!req.socket) {
+    const forwarded = req.headers?.['x-forwarded-for'];
+    const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : '') || '127.0.0.1';
+    (req as any).socket = { remoteAddress: ip };
+  } else if (!req.socket.remoteAddress) {
+    (req.socket as any).remoteAddress = '127.0.0.1';
+  }
+  if (!req.connection) {
+    (req as any).connection = req.socket;
+  }
+  next();
+});
+
 const debugLog = (msg: string) => {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 };
 
 app.use(cors());
 
+// Safe IP extractor that never throws or crashes on serverless runtimes
+const getClientIp = (req: any): string => {
+  try {
+    const forwarded = req.headers?.['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length > 0) {
+      return forwarded.split(',')[0].trim();
+    }
+    if (Array.isArray(forwarded) && forwarded.length > 0) {
+      return String(forwarded[0]).split(',')[0].trim();
+    }
+    return (
+      req.headers?.['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      req.connection?.remoteAddress ||
+      '127.0.0.1'
+    );
+  } catch {
+    return '127.0.0.1';
+  }
+};
+
 // --- RATE LIMITERS ---
 
 const standardLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
+  keyGenerator: (req) => getClientIp(req),
+  validate: { trustProxy: false, xForwardedForHeader: false, default: false },
   message: { error: "Demasiadas peticiones. Intenta de nuevo en 15 minutos." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -31,6 +69,8 @@ const standardLimiter = rateLimit({
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // 200 chat messages per 15 mins for smooth conversational flow
+  keyGenerator: (req) => getClientIp(req),
+  validate: { trustProxy: false, xForwardedForHeader: false, default: false },
   message: { error: "Has alcanzado el límite de consultas de IA. Espera unos minutos." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -39,6 +79,8 @@ const aiLimiter = rateLimit({
 const paymentLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // 10 payment attempts per hour
+  keyGenerator: (req) => getClientIp(req),
+  validate: { trustProxy: false, xForwardedForHeader: false, default: false },
   message: { error: "Límite de intentos de pago alcanzado. Intenta más tarde." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -1092,31 +1134,38 @@ setupBlogRoutes(app);
 
 // Vite for dev / Static for production
 const isServerless = !!process.env.VERCEL;
-if (!isServerless && process.env.NODE_ENV !== "production") {
-  debugLog("Starting in DEVELOPMENT mode with Vite middleware");
-  import("vite").then(({ createServer: createViteServer }) => {
-    return createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+if (!isServerless) {
+  if (process.env.NODE_ENV !== "production") {
+    debugLog("Starting in DEVELOPMENT mode with Vite middleware");
+    import("vite").then(({ createServer: createViteServer }) => {
+      return createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running at http://0.0.0.0:${PORT}`);
+      });
+    }).catch((err) => {
+      console.error("Error starting Vite server:", err);
     });
-  }).then((vite) => {
-    app.use(vite.middlewares);
+  } else {
+    debugLog("Starting in PRODUCTION mode serving dist folder");
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      if (req.url.startsWith('/api/')) {
+        return res.status(404).json({ error: "API not found" });
+      }
+      res.sendFile(path.join(distPath, "index.html"));
+    });
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running at http://0.0.0.0:${PORT}`);
     });
-  }).catch((err) => {
-    console.error("Error starting Vite server:", err);
-  });
+  }
 } else {
-  debugLog("Starting in PRODUCTION mode serving dist folder");
-  const distPath = path.join(process.cwd(), "dist");
-  app.use(express.static(distPath));
-  app.get("*", (req, res) => {
-    if (req.url.startsWith('/api/')) {
-      return res.status(404).json({ error: "API not found" });
-    }
-    res.sendFile(path.join(distPath, "index.html"));
-  });
+  debugLog("Initialized Express app in SERVERLESS mode");
 }
 
 export default app;
