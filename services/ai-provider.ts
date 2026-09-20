@@ -77,7 +77,7 @@ let moonshotAuthFailed = false;
 let lastDeepseekKey = "";
 let lastMoonshotKey = "";
 
-export async function generateResponse(userMessages: any[]) {
+export async function generateResponse(userMessages: any[], userName?: string) {
   const deepseekKey = (process.env.DEEPSEEK_API_KEY || "").trim();
   const moonshotKey = (process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.KIMI_KEY || "").trim();
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
@@ -92,9 +92,15 @@ export async function generateResponse(userMessages: any[]) {
     lastMoonshotKey = moonshotKey;
   }
 
+  const userPromptAddon = userName && userName.trim().length > 0 && userName !== 'Usuario'
+    ? `\n\nDATOS DEL CLIENTE:\nEl usuario con quien hablas se llama "${userName.trim()}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`
+    : '';
+
+  const effectiveSystemPrompt = `${JUSTINO_SYSTEM_PROMPT}${userPromptAddon}`;
+
   // Reconstruct the payload with the server-side system prompt
   const secureMessages = [
-    { role: 'system', content: JUSTINO_SYSTEM_PROMPT },
+    { role: 'system', content: effectiveSystemPrompt },
     ...userMessages.filter(m => m.role === 'user' || m.role === 'assistant').slice(-12)
   ];
 
@@ -151,7 +157,7 @@ export async function generateResponse(userMessages: any[]) {
             model: modelName,
             contents: contents,
             config: {
-              systemInstruction: JUSTINO_SYSTEM_PROMPT,
+              systemInstruction: effectiveSystemPrompt,
               temperature: 0.25,
               thinkingConfig: { thinkingBudget: 0 }
             }
@@ -229,48 +235,54 @@ export async function generateResponse(userMessages: any[]) {
     }
   }
 
-  // 2. PRIORIDAD 2 (RESPALDO): Kimi / Moonshot
+  // 2. PRIORIDAD 2 (RESPALDO): Kimi / Moonshot (compatible con api.moonshot.ai y api.moonshot.cn)
   if (hasMoonshot) {
-    try {
-      console.log("[AI Provider] [2/3] Solicitando inferencia a Kimi / Moonshot (Respaldo)...");
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const endpointsToTry = [
+      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.7-code-highspeed", temp: 1 },
+      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.6", temp: 1 },
+      { url: "https://api.moonshot.cn/v1/chat/completions", model: "moonshot-v1-8k", temp: 0.25 }
+    ];
 
-      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${moonshotKey}`
-        },
-        body: JSON.stringify({
-          model: "moonshot-v1-8k",
-          messages: secureMessages,
-          temperature: 0.25,
-          max_tokens: 3500
-        }),
-        signal: controller.signal
-      });
+    for (const ep of endpointsToTry) {
+      try {
+        console.log(`[AI Provider] [2/3] Solicitando inferencia a Kimi (${ep.model})...`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      clearTimeout(timeoutId);
+        const response = await fetch(ep.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${moonshotKey}`
+          },
+          body: JSON.stringify({
+            model: ep.model,
+            messages: secureMessages,
+            temperature: ep.temp,
+            max_tokens: 3500
+          }),
+          signal: controller.signal
+        });
 
-      if (response.ok) {
-        const json = await response.json();
-        if (json?.choices?.[0]?.message?.content) {
-          console.log("[AI Provider] Respuesta generada exitosamente con Kimi / Moonshot.");
-          return json;
-        }
-      } else {
-        const errText = await response.text().catch(() => "");
-        if (response.status === 401 || response.status === 403) {
-          moonshotAuthFailed = true;
-          console.warn(`[AI Provider] Clave de Kimi / Moonshot no válida o expirada (HTTP ${response.status}). Pasando inmediatamente a Gemini...`);
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const json = await response.json();
+          if (json?.choices?.[0]?.message?.content) {
+            console.log(`[AI Provider] Respuesta generada exitosamente con Kimi (${ep.model}).`);
+            return json;
+          }
         } else {
-          console.warn(`[AI Provider] Kimi / Moonshot devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Gemini...`);
+          const errText = await response.text().catch(() => "");
+          console.warn(`[AI Provider] Kimi (${ep.model}) código HTTP ${response.status}: ${errText.substring(0, 100)}`);
+          if (response.status === 401 && ep.url.includes('.cn')) {
+            moonshotAuthFailed = true;
+          }
         }
+      } catch (error: any) {
+        console.warn(`[AI Provider] Error o timeout con Kimi (${ep.model}): ${error.message}`);
       }
-    } catch (error: any) {
-      console.warn(`[AI Provider] Error o timeout con Kimi / Moonshot (${error.message}). Pasando a Gemini...`);
     }
   }
 

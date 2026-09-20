@@ -298,6 +298,7 @@ export const sendMessageToJustino = async (
       signal: controller.signal,
       body: JSON.stringify({
         model: "deepseek-chat",
+        userName: userName,
         messages: [
           { role: "system", content: `${SYSTEM_INSTRUCTION}${nameContext}` },
           ...history.filter(m => m.id !== 'welcome' && m.id !== 'error').map(m => ({

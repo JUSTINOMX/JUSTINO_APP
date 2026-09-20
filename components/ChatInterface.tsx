@@ -229,7 +229,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
             }`}>
               <div className="space-y-4">
                 <div className="whitespace-pre-wrap leading-relaxed text-[15px] font-medium">
-                  {renderFormattedText(msg.text)}
+                  {renderFormattedText(
+                    msg.id === 'welcome' && (user?.preferredName || user?.username) && !msg.text.includes(user?.preferredName || user?.username || '')
+                      ? msg.text.replace(/^Hola(,\s*bienvenido)?/i, `Hola **${user?.preferredName || user?.username}**, bienvenido`)
+                      : msg.text
+                  )}
                 </div>
                 
                 {msg.sources && (

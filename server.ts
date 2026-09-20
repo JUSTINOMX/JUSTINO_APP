@@ -977,7 +977,7 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
   try {
     debugLog(`Incoming chat request to ${req.url}`);
     
-    const { messages } = req.body;
+    const { messages, userName } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       debugLog("Error: Invalid messages format");
@@ -1006,7 +1006,7 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
       });
     }
 
-    const data = await generateResponse(userMessages);
+    const data = await generateResponse(userMessages, userName);
     debugLog(`AI response generated successfully for ${req.url}`);
     res.json(data);
   } catch (error: any) {

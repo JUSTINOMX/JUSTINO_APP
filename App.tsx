@@ -39,6 +39,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
+  const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
 
   // The new high-converting landing page (LandingPageV2) is now the DEFAULT for root (/) and /lp.
   // The previous landing page remains preserved and accessible for traffic via /v1, /respaldo, /original, ?v=1, etc.
@@ -109,10 +110,13 @@ function App() {
         ? preferredName.toLowerCase().replace(/[^a-z0-9_.-]/g, '')
         : (email ? email.split('@')[0] : 'usuario');
 
+      const displayName = preferredName || email.split('@')[0];
+
       await supabase.from('profiles').upsert({
         id: targetUserId,
         email: email,
-        display_name: preferredName || email.split('@')[0],
+        full_name: displayName,
+        display_name: displayName,
         username: cleanUsername,
         has_active_access: true,
         updated_at: new Date().toISOString()
@@ -124,16 +128,22 @@ function App() {
         .eq('user_id', targetUserId)
         .limit(1);
 
-      if (!existingCases || existingCases.length === 0) {
-        await supabase.from('legal_cases').insert([{
+      if (existingCases && existingCases.length > 0) {
+        setCurrentCaseId(existingCases[0].id);
+      } else {
+        const { data: newCase } = await supabase.from('legal_cases').insert([{
           user_id: targetUserId,
-          title: `Expediente de ${preferredName || 'Principal'}`,
+          title: `Expediente de ${displayName || 'Principal'}`,
           case_type: 'general',
           status: 'active',
-          state_jurisdiction: 'Nacional / Por definir',
+          state_jurisdiction: 'Nacional / México',
           city_jurisdiction: 'Por definir',
           updated_at: new Date().toISOString()
-        }]);
+        }]).select('id').single();
+
+        if (newCase?.id) {
+          setCurrentCaseId(newCase.id);
+        }
       }
     } catch (err) {
       console.warn("Could not ensure profile/case in Supabase:", err);
@@ -161,8 +171,30 @@ function App() {
       if (session?.user) {
         const userMeta = (session.user.user_metadata as any) || {};
         const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_preferred_name') : '';
-        const preferredName = userMeta.preferred_name || storedPref || userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
-        const cleanUsername = userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+        let preferredName = userMeta.preferred_name || storedPref || userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+        let cleanUsername = userMeta.username || session.user.email?.split('@')[0] || 'Usuario';
+
+        // Query profiles table directly from Supabase to get the exact database name
+        try {
+          const { data: dbProfile } = await supabase
+            .from('profiles')
+            .select('full_name, display_name, username')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (dbProfile) {
+            if (dbProfile.full_name && dbProfile.full_name.trim()) {
+              preferredName = dbProfile.full_name.trim();
+            } else if (dbProfile.display_name && dbProfile.display_name.trim()) {
+              preferredName = dbProfile.display_name.trim();
+            }
+            if (dbProfile.username && dbProfile.username.trim()) {
+              cleanUsername = dbProfile.username.trim();
+            }
+          }
+        } catch (dbErr) {
+          console.warn("Error fetching Supabase profile in auth listener:", dbErr);
+        }
 
         const loggedUser: User = {
           id: session.user.id,
@@ -171,6 +203,19 @@ function App() {
           preferredName: preferredName
         };
         setUser(loggedUser);
+
+        // Update welcome message dynamically with real name
+        setMessages(prev => {
+          if (prev.length <= 1) {
+            return [createInitialWelcomeMessage(preferredName)];
+          }
+          return prev;
+        });
+
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('justino_preferred_name', preferredName);
+          localStorage.setItem('justino_username', cleanUsername);
+        }
         
         // Auto-provision profile and default case in Supabase
         await ensureUserProfileAndCase(session.user.id, session.user.email || '', preferredName);
@@ -358,20 +403,56 @@ function App() {
       return [...prev, msg];
     });
 
-    // Fire-and-forget background sync without blocking state or UI flow
+    // Fire-and-forget background sync to Supabase case_messages
     if (supabase && user?.id) {
-      Promise.race([
-        supabase.from('case_messages').insert([{
-          case_id: user.id,
-          user_id: user.id,
-          role: msg.sender === 'user' ? 'user' : 'assistant',
-          content: msg.text,
-          sources: []
-        }]),
-        new Promise(resolve => setTimeout(resolve, 800))
-      ]).catch(e => {
-        console.warn("Background case_message sync notice:", e);
-      });
+      (async () => {
+        try {
+          let targetCaseId = currentCaseId;
+          if (!targetCaseId) {
+            const { data: c } = await supabase
+              .from('legal_cases')
+              .select('id')
+              .eq('user_id', user.id)
+              .limit(1);
+            if (c && c.length > 0) {
+              targetCaseId = c[0].id;
+              setCurrentCaseId(targetCaseId);
+            }
+          }
+
+          if (!targetCaseId) {
+            const displayName = user.preferredName || user.username || 'Principal';
+            const { data: newC } = await supabase
+              .from('legal_cases')
+              .insert([{
+                user_id: user.id,
+                title: `Expediente de ${displayName}`,
+                case_type: 'general',
+                status: 'active',
+                state_jurisdiction: 'Nacional / México',
+                city_jurisdiction: 'Por definir'
+              }])
+              .select('id')
+              .single();
+            if (newC?.id) {
+              targetCaseId = newC.id;
+              setCurrentCaseId(targetCaseId);
+            }
+          }
+
+          if (targetCaseId) {
+            await supabase.from('case_messages').insert([{
+              case_id: targetCaseId,
+              user_id: user.id,
+              role: msg.sender === 'user' ? 'user' : 'assistant',
+              content: msg.text,
+              sources: []
+            }]);
+          }
+        } catch (syncErr) {
+          console.warn("Background case_message sync notice:", syncErr);
+        }
+      })();
     }
   };
 

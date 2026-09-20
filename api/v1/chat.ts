@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "No valid messages found" });
     }
 
-    const data = await generateResponse(userMessages);
+    const data = await generateResponse(userMessages, body.userName);
     return res.status(200).json(data);
   } catch (error: any) {
     console.error("[API v1 Chat Handler Error]:", error);
