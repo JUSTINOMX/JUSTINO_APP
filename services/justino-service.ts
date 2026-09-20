@@ -42,12 +42,16 @@ export interface CaseVaultDocument {
   created_at?: string;
 }
 
-// Helper to get auth header
+// Helper to get auth header safely without hanging on browser locks
 const getAuthHeaders = async () => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (supabase) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<{ data: { session: any } }>(resolve =>
+        setTimeout(() => resolve({ data: { session: null } }), 300)
+      );
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
       }

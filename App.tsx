@@ -346,7 +346,7 @@ function App() {
     }
   };
 
-  const handleNewMessage = async (msg: Message) => {
+  const handleNewMessage = (msg: Message) => {
     if (messages.some(m => m.id === msg.id)) {
       return;
     }
@@ -358,18 +358,20 @@ function App() {
       return [...prev, msg];
     });
 
+    // Fire-and-forget background sync without blocking state or UI flow
     if (supabase && user?.id) {
-        try {
-            await supabase.from('case_messages').insert([{
-                case_id: user.id,
-                user_id: user.id,
-                role: msg.sender === 'user' ? 'user' : 'assistant',
-                content: msg.text,
-                sources: []
-            }]);
-        } catch (e) {
-            console.warn("Could not record message in case_messages:", e);
-        }
+      Promise.race([
+        supabase.from('case_messages').insert([{
+          case_id: user.id,
+          user_id: user.id,
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text,
+          sources: []
+        }]),
+        new Promise(resolve => setTimeout(resolve, 800))
+      ]).catch(e => {
+        console.warn("Background case_message sync notice:", e);
+      });
     }
   };
 

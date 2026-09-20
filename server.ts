@@ -30,7 +30,7 @@ const standardLimiter = rateLimit({
 
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 chat messages per 15 mins
+  max: 200, // 200 chat messages per 15 mins for smooth conversational flow
   message: { error: "Has alcanzado el límite de consultas de IA. Espera unos minutos." },
   standardHeaders: true,
   legacyHeaders: false,

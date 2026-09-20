@@ -71,28 +71,44 @@ ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
     - TÚ eres su guía legal completo. Tú redactas sus escritos y le das las instrucciones exactas para que el usuario o usuaria realice sus trámites directamente por su propia cuenta ("pro se") de manera segura, rápida y formal.
 `;
 
+// State tracking for failed authentication credentials to avoid stalling consecutive user turns
+let deepseekAuthFailed = false;
+let moonshotAuthFailed = false;
+let lastDeepseekKey = "";
+let lastMoonshotKey = "";
+
 export async function generateResponse(userMessages: any[]) {
-  const deepseekKey = process.env.DEEPSEEK_API_KEY;
-  const moonshotKey = process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.KIMI_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const deepseekKey = (process.env.DEEPSEEK_API_KEY || "").trim();
+  const moonshotKey = (process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.KIMI_KEY || "").trim();
+  const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
   
+  // Reset auth failure cache if key changes in environment
+  if (deepseekKey !== lastDeepseekKey) {
+    deepseekAuthFailed = false;
+    lastDeepseekKey = deepseekKey;
+  }
+  if (moonshotKey !== lastMoonshotKey) {
+    moonshotAuthFailed = false;
+    lastMoonshotKey = moonshotKey;
+  }
+
   // Reconstruct the payload with the server-side system prompt
   const secureMessages = [
     { role: 'system', content: JUSTINO_SYSTEM_PROMPT },
     ...userMessages.filter(m => m.role === 'user' || m.role === 'assistant').slice(-12)
   ];
 
-  const hasDeepSeek = Boolean(deepseekKey && deepseekKey.trim().length > 10 && !deepseekKey.includes('placeholder'));
-  const hasMoonshot = Boolean(moonshotKey && moonshotKey.trim().length > 10 && !moonshotKey.includes('placeholder'));
-  const hasGemini = Boolean(geminiKey && geminiKey.trim().length > 5);
+  const hasDeepSeek = Boolean(!deepseekAuthFailed && deepseekKey.length > 10 && !deepseekKey.includes('placeholder'));
+  const hasMoonshot = Boolean(!moonshotAuthFailed && moonshotKey.length > 10 && !moonshotKey.includes('placeholder'));
+  const hasGemini = Boolean(geminiKey.length > 5);
 
-  // Helper for fast Gemini generation
+  // Helper for fast Gemini generation (Priority 3 fallback)
   const tryGemini = async () => {
     if (!hasGemini) return null;
     try {
-      console.log("[AI Provider] Solicitando inferencia ultra-rápida a Gemini...");
+      console.log("[AI Provider] [3/3] Solicitando inferencia ultra-rápida a Gemini...");
       const genAI = new GoogleGenAI({
-        apiKey: geminiKey!.trim(),
+        apiKey: geminiKey,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -122,12 +138,11 @@ export async function generateResponse(userMessages: any[]) {
         contents.unshift({ role: 'user', parts: [{ text: 'Hola Justino' }] });
       }
 
-      // High-performance models with thinkingBudget: 0 for instant legal guidance
+      // Valid models in accordance with @google/genai guidelines
       const modelsToTry = [
         "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-latest"
+        "gemini-flash-latest",
+        "gemini-3.8-flash"
       ];
       
       for (const modelName of modelsToTry) {
@@ -141,12 +156,20 @@ export async function generateResponse(userMessages: any[]) {
               thinkingConfig: { thinkingBudget: 0 }
             }
           });
-          const text = result.text || result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          
+          let text = result.text || "";
+          if (!text && result.candidates?.[0]?.content?.parts) {
+            text = result.candidates[0].content.parts
+              .filter((p: any) => p.text)
+              .map((p: any) => p.text)
+              .join('\n');
+          }
+
           if (text && text.trim().length > 0) {
             console.log(`[AI Provider] Respuesta generada exitosamente con Gemini (${modelName}).`);
             return {
               choices: [{
-                message: { content: text },
+                message: { content: text.trim() },
                 finish_reason: "stop"
               }]
             };
@@ -164,17 +187,16 @@ export async function generateResponse(userMessages: any[]) {
   // 1. PRIORIDAD 1 (DEFAULT): DeepSeek
   if (hasDeepSeek) {
     try {
-      const sanitizedKey = deepseekKey!.trim();
       console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek (Default)...`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6500);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${sanitizedKey}`
+          "Authorization": `Bearer ${deepseekKey}`
         },
         body: JSON.stringify({
           model: "deepseek-chat",
@@ -195,7 +217,12 @@ export async function generateResponse(userMessages: any[]) {
         }
       } else {
         const errText = await response.text().catch(() => "");
-        console.warn(`[AI Provider] DeepSeek devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Kimi / Moonshot...`);
+        if (response.status === 401 || response.status === 403) {
+          deepseekAuthFailed = true;
+          console.warn(`[AI Provider] Clave de DeepSeek no válida o expirada (HTTP ${response.status}). Pasando inmediatamente a Kimi / Moonshot...`);
+        } else {
+          console.warn(`[AI Provider] DeepSeek devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Kimi / Moonshot...`);
+        }
       }
     } catch (error: any) {
       console.warn(`[AI Provider] Error o timeout con DeepSeek (${error.message}). Pasando a Kimi / Moonshot...`);
@@ -205,17 +232,16 @@ export async function generateResponse(userMessages: any[]) {
   // 2. PRIORIDAD 2 (RESPALDO): Kimi / Moonshot
   if (hasMoonshot) {
     try {
-      const sanitizedKey = moonshotKey!.trim();
       console.log("[AI Provider] [2/3] Solicitando inferencia a Kimi / Moonshot (Respaldo)...");
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6500);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${sanitizedKey}`
+          "Authorization": `Bearer ${moonshotKey}`
         },
         body: JSON.stringify({
           model: "moonshot-v1-8k",
@@ -236,7 +262,12 @@ export async function generateResponse(userMessages: any[]) {
         }
       } else {
         const errText = await response.text().catch(() => "");
-        console.warn(`[AI Provider] Kimi / Moonshot devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Gemini...`);
+        if (response.status === 401 || response.status === 403) {
+          moonshotAuthFailed = true;
+          console.warn(`[AI Provider] Clave de Kimi / Moonshot no válida o expirada (HTTP ${response.status}). Pasando inmediatamente a Gemini...`);
+        } else {
+          console.warn(`[AI Provider] Kimi / Moonshot devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Gemini...`);
+        }
       }
     } catch (error: any) {
       console.warn(`[AI Provider] Error o timeout con Kimi / Moonshot (${error.message}). Pasando a Gemini...`);
@@ -245,7 +276,6 @@ export async function generateResponse(userMessages: any[]) {
 
   // 3. PRIORIDAD 3 (RESPALDO ADICIONAL): Gemini
   if (hasGemini) {
-    console.log("[AI Provider] [3/3] Solicitando inferencia a Gemini (Respaldo adicional)...");
     const geminiResult = await tryGemini();
     if (geminiResult) return geminiResult;
   }

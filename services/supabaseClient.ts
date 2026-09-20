@@ -11,7 +11,14 @@ const isConfigured =
   config.supabaseAnonKey.length > 20;
 
 export const supabase = isConfigured
-  ? createClient(config.supabaseUrl, config.supabaseAnonKey)
+  ? createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn()
+      }
+    })
   : null;
 
 // Helper to check if we are online/connected to DB
