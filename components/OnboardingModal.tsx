@@ -7,6 +7,11 @@ import { config } from '../config';
 
 const STRIPE_PAYMENT_LINK_BASE = config?.stripePaymentLink || "https://buy.stripe.com/7sY14n64IaYV6id5Yb1Nu0d";
 
+// CAMBIO TEMPORAL PARA PRUEBAS DE USO:
+// Deshabilitar temporalmente el pago de Stripe para que "Empezar mi caso" lleve directamente a crear el usuario.
+// Se conserva intacto el enlace de pago de Stripe, sus funciones y el webhook.
+const TEMPORARY_DISABLE_STRIPE = true;
+
 interface OnboardingModalProps {
   onComplete: (user?: User) => void;
   onClose: () => void;
@@ -22,7 +27,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
     urlParams?.has('success') || 
     urlParams?.has('payment') || 
     initialStep === 2 || 
-    initialStep === 3
+    initialStep === 3 ||
+    TEMPORARY_DISABLE_STRIPE
   );
   const savedPaymentEmail = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('justino_payment_email') || '') : '';
 
@@ -486,15 +492,21 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
             </form>
           )}
 
-          {/* STEP 2: USERNAME + PASSWORD REGISTRATION (AFTER STRIPE SUCCESS) */}
+          {/* STEP 2: USERNAME + PASSWORD REGISTRATION */}
           {step === 2 && (
             <form onSubmit={handleRegisterUser} className="max-w-xl mx-auto space-y-6 py-2">
               <div className="text-center">
                 <div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
-                  <Check className="w-8 h-8 text-white" strokeWidth={3} />
+                  <UserCheck className="w-8 h-8 text-white" strokeWidth={2.5} />
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-navy-900">¡Pago Confirmado!</h2>
-                <p className="text-slate-500 text-sm mt-1">Crea tu usuario y contraseña para entrar de inmediato a tu expediente.</p>
+                <h2 className="text-2xl sm:text-3xl font-black text-navy-900">
+                  {urlParams?.has('session_id') || urlParams?.has('paid') ? "¡Pago Confirmado!" : "Crear tu Usuario"}
+                </h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  {urlParams?.has('session_id') || urlParams?.has('paid')
+                    ? "Crea tu usuario y contraseña para entrar de inmediato a tu expediente."
+                    : "Crea tu usuario y contraseña para acceder de inmediato a tu expediente con Justino."}
+                </p>
               </div>
 
               <div className="space-y-4">
@@ -536,9 +548,29 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                       className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
                       placeholder="ejemplo: carlos24" 
                     />
-                    <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1 ml-1 font-medium">Tu clave de usuario para ingresar a tu expediente en cualquier momento.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-navy-900 mb-2 uppercase tracking-widest">
+                    Correo Electrónico <span className="text-slate-400 font-normal lowercase">(opcional)</span>
+                  </label>
+                  <div className="relative group">
+                    <input 
+                      type="email" 
+                      value={emailForPayment} 
+                      onChange={(e) => {
+                        setEmailForPayment(e.target.value); 
+                        setErrorMessage('');
+                      }} 
+                      className="w-full p-4 pl-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 focus:bg-white focus:outline-none transition-all text-slate-900 font-bold placeholder:text-slate-300" 
+                      placeholder="ejemplo@correo.com" 
+                    />
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 ml-1 font-medium">Opcional: para respaldar tu expediente y recibir notificaciones.</p>
                 </div>
                 
                 <div>
@@ -589,7 +621,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
                     <span>Activando tu cuenta y abriendo caso...</span>
                   </>
                 ) : (
-                  <span>Activar Cuenta y Abrir mi Caso con Justino</span>
+                  <span>
+                    {urlParams?.has('session_id') || urlParams?.has('paid')
+                      ? "Activar Cuenta y Abrir mi Caso con Justino"
+                      : "Crear Usuario y Abrir mi Caso"}
+                  </span>
                 )}
               </button>
             </form>
