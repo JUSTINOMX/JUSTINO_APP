@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Message, Attachment } from '../types';
-import { sendMessageToJustino } from '../services/justino-service';
-import { Send, Paperclip, Scale, ExternalLink, Globe, Loader2, ShieldCheck, AlertCircle, TrendingUp } from 'lucide-react';
+import { User, Message, Attachment, CaseStatus } from '../types';
+import { sendMessageToJustino, validateDocumentContent } from '../services/justino-service';
+import { Send, Paperclip, Scale, ExternalLink, Globe, Loader2, ShieldCheck, AlertCircle, TrendingUp, Lock } from 'lucide-react';
 
 interface ChatInterfaceProps {
   user: User;
   messages: Message[];
+  caseStatus?: CaseStatus;
+  caseId?: string;
   onNewMessage: (msg: Message) => void;
   onAddFile: (name: string, type: string, content: string, origin?: 'generated' | 'uploaded') => void;
 }
@@ -20,12 +22,21 @@ const STRATEGIC_STEPS = [
   "Blindando tu declaración..."
 ];
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, onNewMessage, onAddFile }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  user, 
+  messages, 
+  caseStatus,
+  caseId,
+  onNewMessage, 
+  onAddFile 
+}) => {
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   
+  const isClosed = caseStatus === 'closed';
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -79,6 +90,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (isClosed) {
+      onNewMessage({
+        id: 'closed-notice-' + Date.now(),
+        text: "🔒 Este expediente se encuentra CERRADO formalmente. No es posible generar nuevas consultas o estrategias sobre un asunto finalizado.",
+        sender: 'bot',
+        timestamp: new Date()
+      });
+      return;
+    }
+
     if ((!input.trim() && !attachment) || isSending) return;
 
     const currentInput = input;
@@ -112,7 +133,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
         currentInput, 
         messages, 
         currentAttachment || undefined, 
-        user.preferredName || user.username
+        user.preferredName || user.username,
+        caseId
       );
       
       // Parse for generated documents wrapped in [DOCUMENTO_OFICIAL: ... ]
@@ -144,14 +166,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
           title = sanitizeDocumentText(title);
           location = sanitizeDocumentText(location);
 
-          onAddFile(
-            title, 
-            "Solicitud Legal", 
-            `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
-            'generated'
-          );
+          // FASE 4, 5 & 8: VALIDACIÓN DOCUMENTAL FORENSE (ANTI-PLACEHOLDERS, JURISDICCIÓN E IDENTIDAD)
+          const validation = validateDocumentContent(content, title, {
+            expectedIdentity: { full_name: user?.preferredName || user?.username },
+            expectedJurisdiction: { state: "Chihuahua" }
+          });
 
-          finalBotText = finalBotText.replace(fullMatch, "");
+          if (validation.isValid) {
+            onAddFile(
+              title, 
+              "Solicitud Legal", 
+              `${content}\n\n---\nUBICACIÓN DE ENTREGA FÍSICA:\n${location}\n(Presentar en original y 2 copias con identificación oficial)`,
+              'generated'
+            );
+            finalBotText = finalBotText.replace(fullMatch, "");
+          } else {
+            // Documento rechazado por placeholders o datos pendientes: NO guardar en Bóveda
+            console.warn("[GUARDRAIL DOCUMENTAL] Documento bloqueado por campos pendientes:", validation.missingFields);
+            finalBotText = finalBotText.replace(fullMatch, "").trim();
+            finalBotText += `\n\n⚠️ **Validación de documento:** Para dejar tu escrito 100% formal listo para firma sin corchetes de relleno, aún requerimos precisar: **${validation.missingFields.join(', ')}**. Por favor, indícamelos para redactar tu documento definitivo.`;
+          }
         });
         
         finalBotText = finalBotText.trim();
@@ -183,7 +217,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
         title = sanitizeDocumentText(title);
         location = sanitizeDocumentText(location);
 
-        if (content.length > 10) {
+        const validation = validateDocumentContent(content, title, {
+          expectedIdentity: { full_name: user?.preferredName || user?.username },
+          expectedJurisdiction: { state: "Chihuahua" }
+        });
+
+        if (validation.isValid && content.length > 10) {
           onAddFile(
             title,
             "Solicitud Legal",
@@ -195,6 +234,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
           if (!finalBotText) {
             finalBotText = "Tu documento oficial está listo y guardado en tu Bóveda Digital para que lo puedas revisar, descargar e imprimir cuando desees.";
           }
+        } else {
+          finalBotText = response.text.substring(0, startIndex).trim();
+          finalBotText += `\n\n⚠️ **Validación de documento:** El escrito no pudo ser emitido de forma definitiva porque faltan datos esenciales: **${validation.missingFields.join(', ')}**. Por favor proporcióname estos datos.`;
         }
       }
 
@@ -279,66 +321,87 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ user, messages, on
       {/* Input Area */}
       <div className="bg-white border-t border-slate-100 p-4 md:p-6 z-20">
         <div className="max-w-4xl mx-auto">
-          <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              const reader = new FileReader();
-              reader.onload = (re) => setAttachment({ name: file.name, type: file.type, content: re.target?.result as string, isTextExtracted: true });
-              reader.readAsDataURL(file);
-            }
-          }} />
-
-          <form onSubmit={handleSend} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 md:gap-4">
-            {/* Desktop Attach Button */}
-            <button 
-              type="button" 
-              onClick={() => fileInputRef.current?.click()} 
-              className={`hidden sm:flex p-5 rounded-2xl transition-all items-center justify-center ${attachment ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-            >
-              <Paperclip className="w-6 h-6" />
-            </button>
-
-            <div className="flex-1 flex flex-col sm:flex-row gap-3 md:gap-4 items-stretch sm:items-end">
-              <div className="flex-1 bg-slate-100 rounded-2xl border border-transparent focus-within:border-emerald-500 focus-within:bg-white transition-all shadow-inner relative">
-                {attachment && (
-                  <div className="absolute -top-12 left-0 right-0 p-2">
-                    <div className="bg-navy-900 text-white text-[10px] font-bold px-4 py-1.5 rounded-full flex items-center justify-between shadow-xl">
-                      <span className="truncate">Evidencia: {attachment.name}</span>
-                      <button type="button" onClick={() => setAttachment(null)} className="ml-4 hover:text-red-400 transition-colors">✕</button>
-                    </div>
-                  </div>
-                )}
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder="Describe tu situación..."
-                  className="w-full min-h-[64px] max-h-40 p-6 resize-none bg-transparent focus:outline-none text-navy-900 font-bold placeholder:text-slate-400"
-                  rows={1}
-                />
-              </div>
-
+          {isClosed ? (
+            <div className="bg-slate-100 border border-slate-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left shadow-inner">
               <div className="flex items-center gap-3">
-                {/* Mobile Attach Button */}
+                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                  <Lock className="w-5 h-5 text-slate-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Expediente Cerrado y Archivado</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Este caso ha sido concluido. La recepción de mensajes y redacción de documentos está inactiva. Puedes consultar y descargar tus documentos en <strong>Mi Bóveda</strong>.
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-400 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                Solo Lectura
+              </div>
+            </div>
+          ) : (
+            <>
+              <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (re) => setAttachment({ name: file.name, type: file.type, content: re.target?.result as string, isTextExtracted: true });
+                  reader.readAsDataURL(file);
+                }
+              }} />
+
+              <form onSubmit={handleSend} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 md:gap-4">
+                {/* Desktop Attach Button */}
                 <button 
                   type="button" 
                   onClick={() => fileInputRef.current?.click()} 
-                  className={`sm:hidden flex-1 p-5 rounded-2xl transition-all flex items-center justify-center ${attachment ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                  className={`hidden sm:flex p-5 rounded-2xl transition-all items-center justify-center ${attachment ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
                 >
                   <Paperclip className="w-6 h-6" />
                 </button>
 
-                <button 
-                  type="submit" 
-                  disabled={(!input.trim() && !attachment) || isSending} 
-                  className="flex-1 sm:flex-none p-6 bg-navy-900 text-white rounded-2xl hover:bg-emerald-600 disabled:opacity-20 transition-all shadow-xl active:scale-95 shrink-0 flex items-center justify-center"
-                >
-                  <Send className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-          </form>
+                <div className="flex-1 flex flex-col sm:flex-row gap-3 md:gap-4 items-stretch sm:items-end">
+                  <div className="flex-1 bg-slate-100 rounded-2xl border border-transparent focus-within:border-emerald-500 focus-within:bg-white transition-all shadow-inner relative">
+                    {attachment && (
+                      <div className="absolute -top-12 left-0 right-0 p-2">
+                        <div className="bg-navy-900 text-white text-[10px] font-bold px-4 py-1.5 rounded-full flex items-center justify-between shadow-xl">
+                          <span className="truncate">Evidencia: {attachment.name}</span>
+                          <button type="button" onClick={() => setAttachment(null)} className="ml-4 hover:text-red-400 transition-colors">✕</button>
+                        </div>
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                      placeholder="Describe tu situación..."
+                      className="w-full min-h-[64px] max-h-40 p-6 resize-none bg-transparent focus:outline-none text-navy-900 font-bold placeholder:text-slate-400"
+                      rows={1}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {/* Mobile Attach Button */}
+                    <button 
+                      type="button" 
+                      onClick={() => fileInputRef.current?.click()} 
+                      className={`sm:hidden flex-1 p-5 rounded-2xl transition-all flex items-center justify-center ${attachment ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                    >
+                      <Paperclip className="w-6 h-6" />
+                    </button>
+
+                    <button 
+                      type="submit" 
+                      disabled={(!input.trim() && !attachment) || isSending} 
+                      className="flex-1 sm:flex-none p-6 bg-navy-900 text-white rounded-2xl hover:bg-emerald-600 disabled:opacity-20 transition-all shadow-xl active:scale-95 shrink-0 flex items-center justify-center"
+                    >
+                      <Send className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </>
+          )}
         </div>
         <div className="mt-4 flex items-center justify-center gap-3 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">
            <ShieldCheck className="w-3 h-3 text-emerald-500" /> Bóveda Cifrada Activa

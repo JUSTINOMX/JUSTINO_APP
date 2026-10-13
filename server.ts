@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { generateResponse } from "./services/ai-provider";
+import { generateResponse, extractCandidateFacts } from "./services/ai-provider";
 import { setupBlogRoutes } from "./lib/blog";
 import { config } from "./config";
 import rateLimit from 'express-rate-limit';
@@ -93,7 +93,6 @@ app.use("/api/", standardLimiter);
 
 const authMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  const userHeader = req.headers['x-user-id'] as string;
 
   // 1. If Bearer token provided, validate with Supabase
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -101,11 +100,13 @@ const authMiddleware = async (req: express.Request, res: express.Response, next:
     if (token) {
       try {
         const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || config.supabaseAnonKey;
+        const keyToUse = serviceRoleKey || supabaseAnonKey;
 
-        if (supabaseUrl && supabaseAnonKey) {
+        if (supabaseUrl && keyToUse) {
           const { createClient } = await import("@supabase/supabase-js");
-          const supabase = createClient(supabaseUrl, supabaseAnonKey);
+          const supabase = createClient(supabaseUrl, keyToUse);
 
           const { data: { user }, error } = await supabase.auth.getUser(token);
 
@@ -120,18 +121,12 @@ const authMiddleware = async (req: express.Request, res: express.Response, next:
     }
   }
 
-  // 2. If client passed user header or body user ID
-  if (userHeader || (req.body && req.body.userId)) {
-    (req as any).user = {
-      id: userHeader || req.body.userId,
-      email: (req.body && req.body.email) || `${userHeader}@justino.app`
-    };
-    return next();
-  }
-
-  // 3. For chat consultations of paying clients, allow gracefully so the chat never freezes
-  (req as any).user = { id: 'client_active_session', role: 'client' };
-  return next();
+  // FASE 1.1: ELIMINAR USUARIO FALLBACK
+  // Si no existe Authorization Bearer válido, devolver 401 Unauthorized estricto
+  return res.status(401).json({ 
+    error: "No autorizado. Se requiere una sesión válida o token Bearer.",
+    code: "UNAUTHORIZED"
+  });
 };
 
 const isAdminMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -973,11 +968,18 @@ app.get("/api/v1/admin/stats", authMiddleware, isAdminMiddleware, async (req, re
 
 // --- AI CHAT ENDPOINTS ---
 
+// --- AI CHAT ENDPOINTS ---
+
 const chatHandler = async (req: express.Request, res: express.Response) => {
   try {
     debugLog(`Incoming chat request to ${req.url}`);
     
-    const { messages, userName } = req.body;
+    const { messages, userName, caseId } = req.body;
+    const authenticatedUser = (req as any).user;
+
+    if (!authenticatedUser?.id) {
+      return res.status(401).json({ error: "Sesión no autenticada o token inválido." });
+    }
 
     if (!messages || !Array.isArray(messages)) {
       debugLog("Error: Invalid messages format");
@@ -997,7 +999,7 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
       return res.status(400).json({ error: "Mensaje demasiado largo. Límite: 3000 caracteres." });
     }
 
-    // 3. Optional: Block obvious non-legal prompts at server level
+    // 3. Security: Block obvious non-legal prompts at server level
     const forbiddenKeywords = ['write code', 'javascript', 'python', 'hacking', 'math problem', 'solve equation'];
     const contentLower = lastMsg.content.toLowerCase();
     if (forbiddenKeywords.some(kw => contentLower.includes(kw))) {
@@ -1006,8 +1008,130 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
       });
     }
 
-    const data = await generateResponse(userMessages, userName);
+    // 4. FASE 1.4: LEGAL_CASES.STATUS COMO FUENTE DE VERDAD Y BLOQUEO DE CASO CERRADO
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    let currentCase: any = null;
+    let supabaseAdmin: any = null;
+
+    if (supabaseUrl && serviceRoleKey) {
+      const { createClient } = await import("@supabase/supabase-js");
+      supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+      if (caseId) {
+        // Validación estricta de propiedad (FASE 1): Usuario A no puede acceder al caso de Usuario B
+        const { data: specificCase, error: specError } = await supabaseAdmin
+          .from('legal_cases')
+          .select('*')
+          .eq('id', caseId)
+          .single();
+
+        if (specificCase) {
+          if (specificCase.user_id !== authenticatedUser.id) {
+            debugLog(`[SECURITY VIOLATION] Usuario ${authenticatedUser.id} intentó acceder al caso ${caseId} que pertenece a ${specificCase.user_id}`);
+            return res.status(403).json({ 
+              error: "Acceso denegado: no eres el propietario de este expediente.",
+              code: "FORBIDDEN" 
+            });
+          }
+          currentCase = specificCase;
+        } else {
+          return res.status(404).json({
+            error: "Expediente no encontrado.",
+            code: "CASE_NOT_FOUND"
+          });
+        }
+      } else {
+        const { data: casesFound } = await supabaseAdmin
+          .from('legal_cases')
+          .select('*')
+          .eq('user_id', authenticatedUser.id)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (casesFound && casesFound.length > 0) {
+          currentCase = casesFound[0];
+        }
+      }
+    }
+
+    // CASO CERRADO = CASO NO OPERABLE (FASE 1.4 & FASE 2)
+    // Un caso cerrado NO puede llamar al LLM ni generar nuevos escritos ni alterar estrategia
+    if (currentCase && currentCase.status === 'closed') {
+      debugLog(`[BLOQUEO DE CASO CERRADO] Expediente ${currentCase.id} está CERRADO. Bloqueando llamada a LLM.`);
+      return res.status(403).json({
+        error: "Este expediente se encuentra formalmente CERRADO. No es posible generar nuevas consultas, estrategias o documentos sobre un asunto finalizado.",
+        choices: [{
+          message: {
+            content: "🔒 Este expediente está formalmente cerrado. No es posible recibir nuevos mensajes ni generar documentos sobre un caso finalizado. Puedes consultar tu expediente o iniciar un nuevo trámite legal seleccionando 'Nuevo Caso'."
+          },
+          finish_reason: "stop"
+        }],
+        caseStatus: "closed"
+      });
+    }
+
+    // 5. FASE 2, FASE 3 & FASE 7: ESTADO ESTRUCTURADO Y EXTRACCIÓN DE CANDIDATOS
+    const existingStructuredState = currentCase?.structured_state || {
+      identity: { full_name: currentCase?.victim_name || userName || null, address: null, city: currentCase?.city_jurisdiction || null, state: currentCase?.state_jurisdiction || null, postal_code: null },
+      jurisdiction: { country: "México", state: currentCase?.state_jurisdiction || null, city: currentCase?.city_jurisdiction || null, judicial_district: null, authority: null, source: null, confirmed: !!currentCase?.state_jurisdiction },
+      participants: [],
+      facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+      dates: [],
+      amounts: [],
+      evidence: [],
+      strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+      actions: [],
+      decisions: [],
+      document_state: { current_documents: [], pending_documents: [] }
+    };
+
+    const updatedStructuredState = extractCandidateFacts(userMessages, existingStructuredState);
+
+    // Context for LLM (Context Builder FASE 3)
+    const caseContext = {
+      caseId: currentCase?.id,
+      status: currentCase?.status || 'active',
+      jurisdiction: {
+        state: currentCase?.state_jurisdiction || updatedStructuredState.jurisdiction?.state,
+        city: currentCase?.city_jurisdiction || updatedStructuredState.jurisdiction?.city
+      },
+      structuredState: updatedStructuredState,
+      identity: {
+        full_name: updatedStructuredState.identity?.full_name || userName,
+        address: updatedStructuredState.identity?.address
+      }
+    };
+
+    const data = await generateResponse(userMessages, userName, caseContext);
     debugLog(`AI response generated successfully for ${req.url}`);
+
+    // Persistir estado estructurado actualizado y jurisdicción/identidad en legal_cases
+    if (currentCase?.id && supabaseAdmin) {
+      try {
+        const updatePayload: any = {
+          structured_state: updatedStructuredState,
+          updated_at: new Date().toISOString()
+        };
+
+        if (updatedStructuredState.jurisdiction?.state && (!currentCase.state_jurisdiction || currentCase.state_jurisdiction.includes('Por definir') || currentCase.state_jurisdiction.includes('Nacional'))) {
+          updatePayload.state_jurisdiction = updatedStructuredState.jurisdiction.state;
+          if (updatedStructuredState.jurisdiction.city) {
+            updatePayload.city_jurisdiction = updatedStructuredState.jurisdiction.city;
+          }
+        }
+
+        if (updatedStructuredState.identity?.full_name && (!currentCase.victim_name || currentCase.victim_name === 'Usuario')) {
+          updatePayload.victim_name = updatedStructuredState.identity.full_name;
+        }
+
+        await supabaseAdmin.from('legal_cases').update(updatePayload).eq('id', currentCase.id);
+      } catch (saveErr) {
+        console.warn("Aviso al guardar structured_state:", saveErr);
+      }
+    }
+
     res.json(data);
   } catch (error: any) {
     debugLog(`AI Proxy Error at ${req.url}: ${error.message}`);
@@ -1017,6 +1141,178 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
 
 app.post("/api/chat", authMiddleware, aiLimiter, chatHandler);
 app.post("/api/v1/chat", authMiddleware, aiLimiter, chatHandler);
+
+// --- CASE CLOSURE, CREATION & STATUS ENDPOINTS (FASE 1.2, 1.3, 1.4, 14) ---
+app.post("/api/v1/cases/new", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { title, caseType, stateJurisdiction, cityJurisdiction } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const initialStructuredState = {
+      identity: { full_name: null, address: null, city: cityJurisdiction || null, state: stateJurisdiction || null, postal_code: null },
+      jurisdiction: { country: "México", state: stateJurisdiction || null, city: cityJurisdiction || null, judicial_district: null, authority: null, confirmed: false },
+      participants: [],
+      facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+      evidence: [],
+      dates: [],
+      amounts: [],
+      strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+      actions: [],
+      decisions: [],
+      document_state: { current_documents: [], pending_documents: [] }
+    };
+
+    const newCasePayload: any = {
+      user_id: userId,
+      title: title || 'Nuevo Expediente Legal',
+      case_type: caseType || 'general',
+      status: 'active',
+      state_jurisdiction: stateJurisdiction || 'Nacional / México',
+      city_jurisdiction: cityJurisdiction || 'Por definir',
+      structured_state: initialStructuredState,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: newCase, error: insertErr } = await supabaseAdmin
+      .from('legal_cases')
+      .insert([newCasePayload])
+      .select()
+      .single();
+
+    if (insertErr) {
+      // Fallback si la columna structured_state no está presente aún
+      const { data: fbCase, error: fbErr } = await supabaseAdmin
+        .from('legal_cases')
+        .insert([{
+          user_id: userId,
+          title: title || 'Nuevo Expediente Legal',
+          case_type: caseType || 'general',
+          status: 'active',
+          state_jurisdiction: stateJurisdiction || 'Nacional / México',
+          city_jurisdiction: cityJurisdiction || 'Por definir',
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (fbErr) throw fbErr;
+      return res.json({ success: true, case: fbCase });
+    }
+
+    console.log(`[NEW CASE] Nuevo caso creado con éxito: ${newCase.id} para usuario ${userId}`);
+    res.json({ success: true, case: newCase });
+  } catch (err: any) {
+    console.error("[NEW CASE ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error al crear nuevo expediente." });
+  }
+});
+
+app.post("/api/v1/cases/close", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { caseId } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').update({
+      status: 'closed',
+      closed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq('user_id', userId);
+
+    if (caseId) {
+      query = query.eq('id', caseId);
+    }
+
+    const { error: updateError } = await query;
+    if (updateError) {
+      // Fallback si la columna closed_at no ha sido migrada aún
+      await supabaseAdmin.from('legal_cases').update({
+        status: 'closed',
+        updated_at: new Date().toISOString()
+      }).eq('user_id', userId);
+    }
+
+    console.log(`[CASE CLOSURE] Caso cerrado formalmente en Supabase para user: ${userId}`);
+    res.json({ success: true, status: 'closed', closed_at: new Date().toISOString() });
+  } catch (err: any) {
+    console.error("[CASE CLOSURE ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error al cerrar caso en base de datos." });
+  }
+});
+
+app.get("/api/v1/cases/status", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const caseId = req.query.caseId as string;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').select('*').eq('user_id', userId);
+    if (caseId) {
+      query = query.eq('id', caseId);
+    }
+
+    const { data: cases, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !cases || cases.length === 0) {
+      return res.json({ status: 'active', isClosed: false });
+    }
+
+    const currentCase = cases[0];
+    res.json({
+      caseId: currentCase.id,
+      status: currentCase.status || 'active',
+      isClosed: currentCase.status === 'closed',
+      closedAt: currentCase.closed_at || null,
+      structuredState: currentCase.structured_state || null,
+      jurisdiction: {
+        state: currentCase.state_jurisdiction,
+        city: currentCase.city_jurisdiction
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- STRIPE CHECKOUT PAYMENT LINK & SESSION CREATION ---
 

@@ -43,19 +43,13 @@ export interface CaseVaultDocument {
 }
 
 // Helper to get auth header safely without hanging on browser locks
-const getAuthHeaders = async () => {
+export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (supabase) {
     try {
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise<{ data: { session: any } }>(resolve =>
-        setTimeout(() => resolve({ data: { session: null } }), 300)
-      );
-      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
-      }
-      if (session?.user?.id) {
         headers["x-user-id"] = session.user.id;
       }
     } catch (e) {
@@ -67,6 +61,104 @@ const getAuthHeaders = async () => {
     headers["x-user-id"] = localUsername;
   }
   return headers;
+};
+
+// --- VALIDACIÓN DOCUMENTAL ANTI-PLACEHOLDERS, JURISDICCIÓN E IDENTIDAD (FASE 4 & FASE 8) ---
+export const validateDocumentContent = (
+  content: string, 
+  title?: string,
+  caseContext?: {
+    expectedJurisdiction?: { state?: string | null; city?: string | null };
+    expectedIdentity?: { full_name?: string | null };
+    structuredState?: any;
+  }
+): { isValid: boolean; missingFields: string[]; reason?: string } => {
+  const missingFields: string[] = [];
+
+  if (!content || content.trim().length < 120) {
+    return {
+      isValid: false,
+      missingFields: ["Extensión insuficiente para un escrito formal"],
+      reason: "El escrito es demasiado breve para cumplir con la estructura forense legal requerida."
+    };
+  }
+
+  // 1. Detectar corchetes de relleno [ ... ]
+  const bracketMatches = content.match(/\[[^\]\n]+\]/g);
+  if (bracketMatches && bracketMatches.length > 0) {
+    const offending = bracketMatches.filter(b => 
+      !b.toLowerCase().includes('documento_oficial') &&
+      !b.toLowerCase().includes('archivo') &&
+      !b.toLowerCase().includes('evidencia')
+    );
+    if (offending.length > 0) {
+      offending.forEach(b => missingFields.push(`Placeholder: ${b}`));
+    }
+  }
+
+  // 2. Detectar textos de relleno conocidos sin corchetes
+  const commonPlaceholders = [
+    { pattern: /\bTU CALLE\b/i, name: "Calle y número del promovente" },
+    { pattern: /\bTU N[UÚ]MERO\b/i, name: "Número exterior/interior" },
+    { pattern: /\bTU COLONIA\b/i, name: "Colonia del domicilio" },
+    { pattern: /\bTU C\.?P\.?\b/i, name: "Código Postal" },
+    { pattern: /\bPOR DEFINIR\b/i, name: "Dato sin definir" },
+    { pattern: /\bNOMBRE DEL DEMANDADO\b/i, name: "Nombre del demandado" },
+    { pattern: /\bDOMICILIO DEL DEMANDADO\b/i, name: "Domicilio del demandado" },
+    { pattern: /\bFECHA DE HOY\b/i, name: "Fecha de emisión" },
+    { pattern: /\bNOMBRE COMPLETO\b/i, name: "Nombre completo" }
+  ];
+
+  for (const item of commonPlaceholders) {
+    if (item.pattern.test(content) || (title && item.pattern.test(title))) {
+      missingFields.push(item.name);
+    }
+  }
+
+  // 3. FASE 7: Validación de fecha temporal (Bloquear fechas de entrenamiento como mayo de 2024)
+  const legacyDateRegex = /\b(?:23 de mayo de 2024|mayo de 2024|mayo 2024|2024\b)/i;
+  // Solo bloquear si la fecha 2024 aparece en el cierre/firma de emisión del escrito
+  const proemioClosing = content.slice(-300);
+  if (legacyDateRegex.test(proemioClosing)) {
+    missingFields.push("Fecha de emisión inválida (Se detectó año 2024 en lugar del año en curso 2026)");
+  }
+
+  // 4. FASE 4: Validación de Jurisdicción (Evitar suplantación por Ciudad de México)
+  const targetState = caseContext?.expectedJurisdiction?.state || caseContext?.structuredState?.jurisdiction?.state;
+  if (targetState && targetState.toLowerCase().includes('chihuahua')) {
+    const cdmxViolations = [
+      "ciudad de méxico",
+      "cdmx",
+      "distrito federal",
+      "tribunal superior de justicia de la ciudad de méxico",
+      "código civil para el distrito federal"
+    ];
+    const contentLower = content.toLowerCase();
+    for (const v of cdmxViolations) {
+      if (contentLower.includes(v)) {
+        missingFields.push(`Inconsistencia de Jurisdicción: El documento cita "${v}" pero la jurisdicción formal del caso es Chihuahua`);
+        break;
+      }
+    }
+  }
+
+  // 5. FASE 5: Validación de Identidad (Verificar que el promovente coincide)
+  const targetFullName = caseContext?.expectedIdentity?.full_name || caseContext?.structuredState?.identity?.full_name;
+  if (targetFullName && targetFullName.length > 3 && targetFullName !== 'Usuario') {
+    const contentLower = content.toLowerCase();
+    const nameLower = targetFullName.toLowerCase();
+    if (!contentLower.includes(nameLower)) {
+      missingFields.push(`Inconsistencia de Identidad: El documento no individualiza a la promovente titular "${targetFullName}"`);
+    }
+  }
+
+  return {
+    isValid: missingFields.length === 0,
+    missingFields,
+    reason: missingFields.length > 0
+      ? `El documento contiene datos pendientes o inconsistencias: ${missingFields.join(', ')}`
+      : undefined
+  };
 };
 
 // 2) Funciones de Servicio de Casos y Bóveda (Supabase)
@@ -83,13 +175,46 @@ export const listCases = async (userId: string): Promise<LegalCase[]> => {
   return data || [];
 };
 
-export const createCase = async (userId: string, caseData: Partial<LegalCase>): Promise<LegalCase> => {
+// FASE 14: Creación de Nuevo Caso formal sin reabrir casos concluidos
+export const createNewCase = async (
+  userId: string, 
+  title?: string, 
+  stateJurisdiction?: string, 
+  cityJurisdiction?: string
+): Promise<LegalCase> => {
+  // 1. Intentar endpoint backend con autenticación
+  try {
+    const headers = await getAuthHeaders();
+    if (headers["Authorization"]) {
+      const response = await fetch("/api/v1/cases/new", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: title || `Nuevo Expediente Legal`,
+          stateJurisdiction: stateJurisdiction || 'Nacional / México',
+          cityJurisdiction: cityJurisdiction || 'Por definir'
+        })
+      });
+      if (response.ok) {
+        const resData = await response.json();
+        if (resData.case) return resData.case;
+      }
+    }
+  } catch (backendErr) {
+    console.warn("Backend createNewCase notice, falling back to direct Supabase insert:", backendErr);
+  }
+
+  // 2. Fallback directo a Supabase
   if (!supabase) throw new Error("Supabase client is not initialized");
   const { data, error } = await supabase
     .from('legal_cases')
     .insert([{
-      ...caseData,
       user_id: userId,
+      title: title || `Expediente Legal`,
+      case_type: 'general',
+      status: 'active',
+      state_jurisdiction: stateJurisdiction || 'Nacional / México',
+      city_jurisdiction: cityJurisdiction || 'Por definir',
       updated_at: new Date().toISOString()
     }])
     .select()
@@ -97,6 +222,104 @@ export const createCase = async (userId: string, caseData: Partial<LegalCase>): 
 
   if (error) throw error;
   return data;
+};
+
+export const createCase = async (userId: string, caseData: Partial<LegalCase>): Promise<LegalCase> => {
+  if (!supabase) throw new Error("Supabase client is not initialized");
+  const { data, error } = await supabase
+    .from('legal_cases')
+    .insert([{
+      ...caseData,
+      user_id: userId,
+      status: caseData.status || 'active',
+      updated_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+// FASE 1.3: Cierre Real del Caso en Supabase
+export const closeCase = async (caseId: string, userId: string): Promise<boolean> => {
+  const now = new Date().toISOString();
+  
+  // 1. Intentar endpoint de backend autenticado
+  try {
+    const headers = await getAuthHeaders();
+    if (headers["Authorization"]) {
+      const response = await fetch("/api/v1/cases/close", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ caseId })
+      });
+      if (response.ok) {
+        return true;
+      }
+    }
+  } catch (backendErr) {
+    console.warn("Backend closeCase notice, trying direct Supabase update:", backendErr);
+  }
+
+  // 2. Direct Supabase update fallback
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('legal_cases')
+        .update({
+          status: 'closed',
+          closed_at: now,
+          updated_at: now
+        })
+        .eq('id', caseId)
+        .eq('user_id', userId);
+
+      if (error) {
+        // Fallback si la columna closed_at no ha sido migrada aún
+        await supabase
+          .from('legal_cases')
+          .update({
+            status: 'closed',
+            updated_at: now
+          })
+          .eq('id', caseId)
+          .eq('user_id', userId);
+      }
+      return true;
+    } catch (dbErr) {
+      console.error("Error updating legal_cases status:", dbErr);
+    }
+  }
+  return false;
+};
+
+// FASE 1.2: Obtener Estado del Caso como Fuente de Verdad
+export const getCaseStatus = async (caseId?: string, userId?: string): Promise<{ status: string; isClosed: boolean; closedAt?: string | null }> => {
+  if (!supabase || !userId) return { status: 'active', isClosed: false };
+
+  try {
+    let query = supabase.from('legal_cases').select('status, closed_at').eq('user_id', userId);
+    if (caseId) {
+      query = query.eq('id', caseId);
+    }
+    const { data, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !data || data.length === 0) {
+      return { status: 'active', isClosed: false };
+    }
+
+    const current = data[0];
+    const isClosed = current.status === 'closed';
+    return {
+      status: current.status || 'active',
+      isClosed,
+      closedAt: current.closed_at || null
+    };
+  } catch (err) {
+    console.warn("Could not retrieve case status from DB:", err);
+    return { status: 'active', isClosed: false };
+  }
 };
 
 export const addCaseMessage = async (caseId: string, userId: string, message: CaseMessage): Promise<CaseMessage> => {
@@ -119,6 +342,15 @@ export const addCaseMessage = async (caseId: string, userId: string, message: Ca
 
 export const saveVaultDocument = async (caseId: string, userId: string, doc: CaseVaultDocument): Promise<CaseVaultDocument> => {
   if (!supabase) throw new Error("Supabase client is not initialized");
+
+  // Validación anti-placeholders si es generado
+  if (doc.origin === 'generated') {
+    const val = validateDocumentContent(doc.legal_content || '', doc.title);
+    if (!val.isValid) {
+      throw new Error(val.reason || "Documento rechazado por contener campos incompletos.");
+    }
+  }
+
   const { data, error } = await supabase
     .from('case_vault_documents')
     .insert([{
@@ -140,7 +372,7 @@ export const saveVaultDocument = async (caseId: string, userId: string, doc: Cas
   return data;
 };
 
-// 3) Subida a Storage y persistencia en case_vault_documents
+// 3) Subida a Storage y persistencia en case_vault_documents con Versionado
 export const uploadToVault = async (
   userId: string,
   name: string,
@@ -151,9 +383,16 @@ export const uploadToVault = async (
 ) => {
   if (!supabase) throw new Error("Supabase client is not initialized");
 
+  // Validar contenido anti-placeholders si es generado
+  if (origin === 'generated') {
+    const val = validateDocumentContent(content, name);
+    if (!val.isValid) {
+      throw new Error(val.reason || "El documento contiene placeholders pendientes y no puede archivarse como oficial.");
+    }
+  }
+
   const filename = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
   const path = `${userId}/${filename}`;
-
   let publicUrl = "";
 
   try {
@@ -179,29 +418,108 @@ export const uploadToVault = async (
       publicUrl = url;
     }
   } catch (storageErr) {
-    console.warn("Storage upload omitido o no disponible:", storageErr);
+    console.warn("Storage upload notice:", storageErr);
   }
 
-  const effectiveCaseId = caseId || userId;
+  const effectiveCaseId = caseId;
+  if (!effectiveCaseId) {
+    throw new Error("No se puede subir ni registrar documento a la Bóveda: caseId es obligatorio.");
+  }
+
+  // FASE 4.5: CONTROL DE VERSIONES DOCUMENTALES
+  let nextVersion = 1;
+  let previousDocId: string | null = null;
+
+  try {
+    const { data: existingDocs } = await supabase
+      .from('case_vault_documents')
+      .select('id, title, requirements')
+      .eq('case_id', effectiveCaseId)
+      .eq('title', name)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (existingDocs && existingDocs.length > 0) {
+      const prevDoc = existingDocs[0] as any;
+      previousDocId = prevDoc.id;
+      let prevVer = 1;
+      if (Array.isArray(prevDoc.requirements)) {
+        prevDoc.requirements.forEach((r: string) => {
+          if (typeof r === 'string' && r.startsWith('version:')) {
+            prevVer = Number(r.split(':')[1]) || 1;
+          }
+        });
+      }
+      nextVersion = prevVer + 1;
+
+      // Marcar documento anterior como superseded
+      try {
+        await supabase
+          .from('case_vault_documents')
+          .update({ is_latest: false, status: 'superseded' })
+          .eq('id', previousDocId);
+      } catch (e) {
+        // Fallback updating requirements array
+        await supabase
+          .from('case_vault_documents')
+          .update({
+            requirements: [`version:${prevVer}`, `status:superseded`, `superseded_by:${nextVersion}`]
+          })
+          .eq('id', previousDocId);
+      }
+    }
+  } catch (verErr) {
+    console.warn("Version lookup notice:", verErr);
+  }
+
+  // Intentar inserción con columnas de versionado completas
+  const payloadFull: any = {
+    case_id: effectiveCaseId,
+    user_id: userId,
+    title: name,
+    legal_content: origin === 'generated' ? content : '',
+    physical_address: '',
+    requirements: [`version:${nextVersion}`, `status:current`, `origin:${origin}`],
+    type,
+    path: path || null,
+    url: publicUrl || null,
+    origin,
+    version: nextVersion,
+    is_latest: true,
+    status: 'current',
+    supersedes_document_id: previousDocId
+  };
 
   const { data, error: dbError } = await supabase
     .from('case_vault_documents')
-    .insert([{
+    .insert([payloadFull])
+    .select()
+    .single();
+
+  if (dbError) {
+    // Fallback seguro en caso de que las columnas nuevas aún no existan en el esquema de Supabase
+    const payloadBase: any = {
       case_id: effectiveCaseId,
       user_id: userId,
       title: name,
       legal_content: origin === 'generated' ? content : '',
       physical_address: '',
-      requirements: [],
-      type,
-      path: path || null,
-      url: publicUrl || null,
-      origin
-    }])
-    .select()
-    .single();
+      requirements: [
+        `version:${nextVersion}`,
+        `status:current`,
+        `origin:${origin}`,
+        previousDocId ? `supersedes:${previousDocId}` : null
+      ].filter(Boolean)
+    };
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from('case_vault_documents')
+      .insert([payloadBase])
+      .select()
+      .single();
 
-  if (dbError) throw dbError;
+    if (fallbackErr) throw fallbackErr;
+    return { ...fallbackData, version: nextVersion, is_latest: true, status: 'current', origin };
+  }
 
   return data;
 };
@@ -283,8 +601,9 @@ export const sendMessageToJustino = async (
   message: string, 
   history: Message[],
   attachment?: Attachment,
-  userName?: string
-): Promise<{text: string, sources: GroundingSource[]}> => {
+  userName?: string,
+  caseId?: string
+): Promise<{text: string, sources: GroundingSource[], caseStatus?: string}> => {
   try {
     const headers = await getAuthHeaders();
     const nameContext = userName ? `\n\nDATOS DEL CLIENTE:\nEl usuario con quien hablas prefiere que le llames "${userName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.` : '';
@@ -299,6 +618,7 @@ export const sendMessageToJustino = async (
       body: JSON.stringify({
         model: "deepseek-chat",
         userName: userName,
+        caseId: caseId,
         messages: [
           { role: "system", content: `${SYSTEM_INSTRUCTION}${nameContext}` },
           ...history.filter(m => m.id !== 'welcome' && m.id !== 'error').map(m => ({
@@ -339,7 +659,8 @@ export const sendMessageToJustino = async (
     }
     return { 
       text: data.choices?.[0]?.message?.content || "No pude obtener una respuesta clara. ¿Podrías intentar de nuevo?",
-      sources: [] 
+      sources: [],
+      caseStatus: data.caseStatus
     };
   } catch (error: any) {
     console.error("Justino SaaS Engine Error:", error);
@@ -350,13 +671,44 @@ export const sendMessageToJustino = async (
 export const generateCaseSummary = async (messages: Message[]): Promise<CaseSummary> => {
   try {
     const headers = await getAuthHeaders();
+
+    // FASE 6: Filtrar rigurosamente los hechos del usuario vs análisis del asistente
+    const userOnlyFacts = messages
+      .filter(m => m.sender === 'user')
+      .map(m => `- ${m.text}`)
+      .slice(-15)
+      .join('\n');
+
+    const botAdvice = messages
+      .filter(m => m.sender === 'bot' && m.id !== 'welcome')
+      .map(m => `- ${m.text}`)
+      .slice(-3)
+      .join('\n');
+
     const response = await fetch("/api/v1/chat", {
       method: "POST",
       headers,
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: [
-          { role: "user", content: `Actúa como un actuario legal. Resume este expediente para el cliente. Devuelve exclusivamente JSON: {"antecedents": ["lista de hechos clave"], "recommendedActions": ["lista de pasos legales sugeridos"]}.\n\nExpediente:\n${messages.slice(-15).map(m => `${m.sender}: ${m.text}`).join('\n')}` }
+          { 
+            role: "user", 
+            content: `Actúa como un actuario legal mexicano imparcial y riguroso.
+Tu misión es resumir este expediente legal diferenciando estrictamente entre HECHOS NARRADOS POR EL USUARIO y RECOMENDACIONES TÉCNICAS DEL ASISTENTE.
+REGLA CRÍTICA: Las opiniones, hipótesis o sugerencias del asistente legal NUNCA deben catalogarse como antecedentes o hechos del usuario.
+
+HECHOS NARRADOS POR EL USUARIO (FUENTE DE ANTECEDENTES):
+${userOnlyFacts || 'Sin antecedentes expresados aún'}
+
+ANÁLISIS Y ESTRATEGIA SUGERIDA POR EL ASISTENTE:
+${botAdvice || 'En análisis preliminar'}
+
+Devuelve EXCLUSIVAMENTE JSON con esta estructura exacta:
+{
+  "antecedents": ["hecho verificado narrado por el usuario 1", "hecho narrado 2"],
+  "recommendedActions": ["paso legal recomendado 1", "paso legal recomendado 2"]
+}` 
+          }
         ],
         response_format: { type: "json_object" },
         temperature: 0.1
@@ -368,8 +720,8 @@ export const generateCaseSummary = async (messages: Message[]): Promise<CaseSumm
     const text = data.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(text);
     return {
-      antecedents: parsed.antecedents || [],
-      recommendedActions: parsed.recommendedActions || [],
+      antecedents: Array.isArray(parsed.antecedents) ? parsed.antecedents : [],
+      recommendedActions: Array.isArray(parsed.recommendedActions) ? parsed.recommendedActions : [],
       lastUpdated: new Date()
     };
   } catch (e) {

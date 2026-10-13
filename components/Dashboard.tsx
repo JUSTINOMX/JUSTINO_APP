@@ -13,6 +13,10 @@ interface DashboardProps {
   user: User;
   messages: Message[];
   vaultFiles: VaultFile[];
+  caseStatus?: CaseStatus;
+  currentCaseId?: string | null;
+  onCloseCase?: () => Promise<void> | void;
+  onNewCase?: () => Promise<void> | void;
   onNewMessage: (msg: Message) => void;
   onAddFile: (name: string, type: string, content: string, origin?: 'generated' | 'uploaded') => void;
   onLogout: () => void;
@@ -22,19 +26,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   user, 
   messages, 
   vaultFiles, 
+  caseStatus: propCaseStatus,
+  currentCaseId,
+  onCloseCase,
+  onNewCase,
   onNewMessage, 
   onAddFile, 
   onLogout 
 }) => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('chat');
-  const [caseStatus, setCaseStatus] = useState<CaseStatus>('analyzing');
+  const [caseStatus, setCaseStatus] = useState<CaseStatus>(propCaseStatus || 'analyzing');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Derive realistic status from actual progress if not explicitly closed
+  // Sincronizar estado real del caso desde Supabase (Fuente de Verdad)
   useEffect(() => {
-    const savedStatus = localStorage.getItem('justino_status') as CaseStatus | null;
-    if (savedStatus === 'closed') {
-      setCaseStatus('closed');
+    if (propCaseStatus) {
+      setCaseStatus(propCaseStatus);
       return;
     }
 
@@ -48,11 +55,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     } else {
       setCaseStatus('analyzing');
     }
-  }, [messages, vaultFiles]);
+  }, [propCaseStatus, messages, vaultFiles]);
 
-  const handleCaseClosed = () => {
+  const handleCaseClosed = async () => {
     setCaseStatus('closed');
-    localStorage.setItem('justino_status', 'closed');
+    if (onCloseCase) {
+      await onCloseCase();
+    }
   };
 
   const handleDataWipe = () => {
@@ -108,6 +117,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="pt-4 mt-4 border-t border-navy-800">
             <NavItem id="legal" icon={Scale} label="Marco Legal" />
           </div>
+
+          {caseStatus === 'closed' && onNewCase && (
+            <div className="pt-4 mt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (onNewCase) await onNewCase();
+                  setActiveTab('chat');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold shadow-md transition-all"
+              >
+                + Iniciar Nuevo Caso
+              </button>
+            </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-navy-800">
@@ -175,15 +200,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <ChatInterface 
               user={user} 
               messages={messages} 
+              caseStatus={caseStatus}
+              caseId={currentCaseId || undefined}
               onNewMessage={onNewMessage} 
               onAddFile={onAddFile} 
             />
           )}
           {activeTab === 'history' && (
             <CaseHistory 
+              user={user}
               messages={messages} 
+              vaultFiles={vaultFiles}
               caseStatus={caseStatus} 
+              caseId={currentCaseId || undefined}
               onCloseCase={handleCaseClosed}
+              onNewCase={onNewCase}
               onWipeData={handleDataWipe}
             />
           )}

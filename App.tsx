@@ -7,10 +7,11 @@ import { Dashboard } from './components/Dashboard';
 import { LoginModal } from './components/LoginModal';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { User, AppView, Message, VaultFile } from './types';
+import { User, AppView, Message, VaultFile, CaseStatus } from './types';
 import { supabase } from './services/supabaseClient';
 import { config } from './config';
-import { uploadToVault } from './services/justino-service';
+import { uploadToVault, closeCase, createNewCase } from './services/justino-service';
+import { Logo } from './components/Logo';
 
 const createInitialWelcomeMessage = (preferredName?: string): Message => {
   const displayName = preferredName ? preferredName.trim() : '';
@@ -40,6 +41,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([createInitialWelcomeMessage()]);
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
   const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
+  const [caseStatus, setCaseStatus] = useState<CaseStatus>('analyzing');
 
   // The new high-converting landing page (LandingPageV2) is now the DEFAULT for root (/) and /lp.
   // The previous landing page remains preserved and accessible for traffic via /v1, /respaldo, /original, ?v=1, etc.
@@ -202,7 +204,17 @@ function App() {
           username: cleanUsername,
           preferredName: preferredName
         };
-        setUser(loggedUser);
+
+        // ATOMIC STATE RESET: If switching accounts, wipe previous session data before setting new user
+        setUser(prev => {
+          if (prev && prev.id !== loggedUser.id) {
+            setVaultFiles([]);
+            setCurrentCaseId(null);
+            setCaseStatus('analyzing');
+            setMessages([createInitialWelcomeMessage(preferredName)]);
+          }
+          return loggedUser;
+        });
 
         // Update welcome message dynamically with real name
         setMessages(prev => {
@@ -229,7 +241,12 @@ function App() {
            setView('dashboard');
         }
       } else {
+        // ATOMIC CLEANUP on SIGNED_OUT or session invalidation
         setUser(null);
+        setCurrentCaseId(null);
+        setCaseStatus('analyzing');
+        setMessages([createInitialWelcomeMessage()]);
+        setVaultFiles([]);
         if (view !== 'landing' && view !== 'onboarding' && view !== 'admin-login') {
           setView('landing');
         }
@@ -241,19 +258,48 @@ function App() {
     };
   }, [view]);
 
-  // Sincronización de datos del usuario (Cloud First)
+  // Sincronización de datos del usuario (Cloud First con protección de ciclo de vida)
   useEffect(() => {
-    if (user && (view === 'dashboard' || view === 'admin-dashboard')) {
+    let isCurrent = true;
+
+    if (user && user.id && (view === 'dashboard' || view === 'admin-dashboard')) {
+        const currentUserId = user.id;
+
         const fetchCloudData = async () => {
-            if (!supabase || !user.id) return;
+            if (!supabase || !isCurrent) return;
 
             try {
+                // 1. FASE 2 & FASE 5: Consultar legal_cases en Supabase como Fuente Única de Verdad
+                let activeCaseId = currentCaseId;
+                const { data: casesData, error: caseError } = await supabase
+                    .from('legal_cases')
+                    .select('*')
+                    .eq('user_id', currentUserId)
+                    .order('updated_at', { ascending: false })
+                    .limit(1);
+
+                if (!isCurrent) return;
+
+                if (casesData && !caseError && casesData.length > 0) {
+                    const activeCase = casesData[0];
+                    activeCaseId = activeCase.id;
+                    setCurrentCaseId(activeCase.id);
+                    if (activeCase.status === 'closed') {
+                        setCaseStatus('closed');
+                    } else if (activeCase.status) {
+                        setCaseStatus(activeCase.status as CaseStatus);
+                    }
+                }
+
+                // 2. Cargar mensajes de conversación
                 const { data: msgs, error: msgError } = await supabase
                     .from('case_messages')
                     .select('*')
-                    .eq('user_id', user.id)
+                    .eq('user_id', currentUserId)
                     .order('created_at', { ascending: true });
                 
+                if (!isCurrent) return;
+
                 if (msgs && !msgError) {
                     if (msgs.length === 0) {
                         setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
@@ -266,36 +312,89 @@ function App() {
                         }));
                         setMessages(formattedMessages);
                     }
-                } else if (messages.length <= 1) {
+                } else if (!msgError) {
                     setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
                 }
 
-                const { data: files, error: fileError } = await supabase
+                // 3. Cargar documentos de la Bóveda filtrados estrictamente por case_id si existe expediente activo
+                let filesQuery = supabase
                     .from('case_vault_documents')
                     .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false });
+                    .eq('user_id', currentUserId);
+
+                if (activeCaseId) {
+                    filesQuery = filesQuery.eq('case_id', activeCaseId);
+                }
+
+                const { data: files, error: fileError } = await filesQuery.order('created_at', { ascending: false });
+
+                if (!isCurrent) return;
 
                 if (files && !fileError && files.length > 0) {
-                    const formattedFiles: VaultFile[] = files.map(f => ({
-                        id: f.id,
-                        name: f.title,
-                        type: f.type || 'application/pdf',
-                        content: f.legal_content,
-                        url: f.url,
-                        origin: (f.origin || 'generated') as 'generated' | 'uploaded',
-                        date: f.created_at
-                    }));
+                    const formattedFiles: VaultFile[] = files.map(f => {
+                        let ver = f.version || 1;
+                        let stat: 'current' | 'superseded' | 'archived' = f.status || 'current';
+                        let orig: 'generated' | 'uploaded' = (f.origin || 'generated') as any;
+
+                        if (Array.isArray(f.requirements)) {
+                            f.requirements.forEach((r: any) => {
+                                if (typeof r === 'string') {
+                                    if (r.startsWith('version:')) ver = Number(r.split(':')[1]) || ver;
+                                    if (r.startsWith('status:')) stat = (r.split(':')[1] as any) || stat;
+                                    if (r.startsWith('origin:')) orig = (r.split(':')[1] as any) || orig;
+                                }
+                            });
+                        }
+
+                        return {
+                            id: f.id,
+                            name: f.title,
+                            type: f.type || 'application/pdf',
+                            content: f.legal_content,
+                            url: f.url,
+                            origin: orig,
+                            version: ver,
+                            status: stat,
+                            isLatest: stat === 'current',
+                            date: f.created_at
+                        };
+                    });
                     setVaultFiles(formattedFiles);
+                } else if (!fileError) {
+                    setVaultFiles([]);
                 }
             } catch (e) {
-                console.error("Sync Error:", e);
+                if (isCurrent) {
+                    console.error("Sync Error:", e);
+                }
             }
         };
 
         fetchCloudData();
     }
-  }, [user, view]);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [user?.id, view]);
+
+  const handleCaseClosed = async () => {
+    if (currentCaseId && user?.id) {
+      await closeCase(currentCaseId, user.id);
+    }
+    setCaseStatus('closed');
+  };
+
+  const handleCreateNewCase = async () => {
+    if (!user?.id) return;
+    const newCase = await createNewCase(user.id, `Expediente de ${user.preferredName || user.username || 'Principal'}`);
+    if (newCase?.id) {
+      setCurrentCaseId(newCase.id);
+      setCaseStatus('analyzing');
+      setMessages([createInitialWelcomeMessage(user.preferredName || user.username)]);
+      setVaultFiles([]);
+    }
+  };
 
   const handleStart = () => {
     setView('onboarding');
@@ -346,12 +445,22 @@ function App() {
       sessionStorage.removeItem('justino_admin_active');
       sessionStorage.clear();
       
-      // Clean up Supabase tokens from localStorage
+      // Clean up Supabase tokens & local vault caches from localStorage
       if (typeof localStorage !== 'undefined') {
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && (key.startsWith('sb-') || key.includes('supabase') || key.startsWith('justino_session'))) {
+          if (
+            key && (
+              key.startsWith('sb-') || 
+              key.includes('supabase') || 
+              key.startsWith('justino_session') ||
+              key === 'justino_local_vault' ||
+              key === 'justino_summary' ||
+              key === 'justino_preferred_name' ||
+              key === 'justino_username'
+            )
+          ) {
             keysToRemove.push(key);
           }
         }
@@ -367,6 +476,8 @@ function App() {
       console.warn("Logout error handled gracefully:", err);
     } finally {
       setUser(null);
+      setCurrentCaseId(null);
+      setCaseStatus('analyzing');
       setMessages([createInitialWelcomeMessage()]);
       setVaultFiles([]);
       setView('landing');
@@ -456,27 +567,19 @@ function App() {
     }
   };
 
-  // Cargar vaultFiles iniciales desde localStorage si aplica
+  // Limpiar residuo de caché local heredado en caso de existir
   useEffect(() => {
     try {
-      const savedLocalVault = localStorage.getItem('justino_local_vault');
-      if (savedLocalVault) {
-        const parsed = JSON.parse(savedLocalVault);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setVaultFiles(prev => {
-            const existingIds = new Set(prev.map(f => f.id));
-            const newItems = parsed.filter(item => !existingIds.has(item.id));
-            return [...prev, ...newItems];
-          });
-        }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('justino_local_vault');
       }
     } catch (e) {
-      console.warn("Error reading local vault storage", e);
+      console.warn("Notice clearing local vault cache", e);
     }
   }, []);
 
   const handleAddFile = async (name: string, type: string, content: string, origin: 'generated' | 'uploaded' = 'generated') => {
-    // 1. Optimistic & Local Storage Update
+    // 1. Optimistic Update (en memoria)
     const tempId = 'vault-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
     const tempFile: VaultFile = {
       id: tempId,
@@ -487,34 +590,46 @@ function App() {
       origin
     };
 
-    setVaultFiles(prev => {
-      const updated = [tempFile, ...prev];
-      try {
-        localStorage.setItem('justino_local_vault', JSON.stringify(updated.slice(0, 30)));
-      } catch (e) {}
-      return updated;
-    });
+    setVaultFiles(prev => [tempFile, ...prev]);
 
-    // 2. Cloud Persistence (si está configurado Supabase)
+    // 2. Cloud Persistence en Supabase (asociado obligatoriamente al caso)
     if (user?.id) {
         try {
-            const savedFile = await uploadToVault(user.id, name, type, content, origin);
+            let targetCaseId = currentCaseId;
+            if (!targetCaseId && supabase) {
+              const { data: cData } = await supabase
+                .from('legal_cases')
+                .select('id')
+                .eq('user_id', user.id)
+                .order('updated_at', { ascending: false })
+                .limit(1);
+              if (cData && cData.length > 0) {
+                targetCaseId = cData[0].id;
+                setCurrentCaseId(targetCaseId);
+              }
+            }
+
+            if (!targetCaseId) {
+              console.warn("No hay un expediente activo para asociar el documento en Bóveda.");
+              return;
+            }
+
+            const savedFile = await uploadToVault(user.id, name, type, content, origin, targetCaseId);
             if (savedFile) {
                 // Replace temp with real cloud data
                 setVaultFiles(prev => {
-                  const updated = prev.map(f => f.id === tempId ? {
+                  return prev.map(f => f.id === tempId ? {
                     id: savedFile.id,
-                    name: savedFile.name,
-                    type: savedFile.type,
+                    name: savedFile.title || name,
+                    type: savedFile.type || type,
                     date: savedFile.created_at,
-                    content: savedFile.content,
+                    content: savedFile.legal_content || content,
                     url: savedFile.url,
-                    origin: savedFile.origin
+                    origin: (savedFile.origin || origin) as any,
+                    version: savedFile.version,
+                    status: savedFile.status,
+                    isLatest: savedFile.is_latest
                   } : f);
-                  try {
-                    localStorage.setItem('justino_local_vault', JSON.stringify(updated.slice(0, 30)));
-                  } catch (e) {}
-                  return updated;
                 });
             }
         } catch (error) {
@@ -563,6 +678,10 @@ function App() {
           user={user || { id: 'user_active', email: 'usuario@justino.app', username: 'Usuario' }} 
           messages={messages} 
           vaultFiles={vaultFiles}
+          caseStatus={caseStatus}
+          currentCaseId={currentCaseId}
+          onCloseCase={handleCaseClosed}
+          onNewCase={handleCreateNewCase}
           onNewMessage={handleNewMessage}
           onAddFile={handleAddFile}
           onLogout={handleLogout}

@@ -175,9 +175,16 @@ export const Vault: React.FC<VaultProps> = ({ files }) => {
                   <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${file.origin === 'generated' ? 'bg-red-50' : 'bg-blue-50'}`}>
                     {getIconForType(file.type, file.origin)}
                   </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${file.origin === 'generated' ? 'text-emerald-600 bg-emerald-100' : 'text-blue-600 bg-blue-100'}`}>
-                    {file.origin === 'generated' ? 'Oficial' : 'Evidencia'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {file.version && (
+                      <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono">
+                        v{file.version}
+                      </span>
+                    )}
+                    <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${file.status === 'superseded' ? 'text-amber-700 bg-amber-100' : (file.origin === 'generated' ? 'text-emerald-600 bg-emerald-100' : 'text-blue-600 bg-blue-100')}`}>
+                      {file.status === 'superseded' ? 'Reemplazado' : (file.origin === 'generated' ? 'Oficial' : 'Evidencia')}
+                    </span>
+                  </div>
                 </div>
                 
                 <h3 className="font-semibold text-navy-900 mb-1 truncate" title={file.name}>{file.name}</h3>

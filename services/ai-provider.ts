@@ -77,7 +77,150 @@ let moonshotAuthFailed = false;
 let lastDeepseekKey = "";
 let lastMoonshotKey = "";
 
-export async function generateResponse(userMessages: any[], userName?: string) {
+// Helper to build realistic Mexican date/time context from system clock
+export const getSystemDateTimeContext = (stateName?: string | null) => {
+  const now = new Date();
+  const isChihuahua = stateName && /chihuahua/i.test(stateName);
+  const timeZone = isChihuahua ? 'America/Chihuahua' : 'America/Mexico_City';
+  
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone
+  };
+  const dateFormatted = now.toLocaleDateString('es-MX', options);
+  const timeFormatted = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone });
+  const year = now.getFullYear();
+
+  return {
+    dateFormatted,
+    timeFormatted,
+    year,
+    timeZone
+  };
+};
+
+// Automated extraction of facts from conversation to maintain structured state
+export const extractCandidateFacts = (userMessages: any[], existingState?: any) => {
+  const state = existingState || {
+    identity: { full_name: null, address: null, city: null, state: null, postal_code: null },
+    jurisdiction: { country: "México", state: null, city: null, judicial_district: null, authority: null, source: null, confirmed: false },
+    participants: [],
+    facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+    dates: [],
+    amounts: [],
+    evidence: [],
+    strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+    actions: [],
+    decisions: [],
+    document_state: { current_documents: [], pending_documents: [] }
+  };
+
+  const onlyUserTexts = userMessages
+    .filter((m: any) => m.role === 'user')
+    .map((m: any) => String(m.content || ''));
+
+  onlyUserTexts.forEach(text => {
+    // 1. Detect City / State
+    const chihMatch = text.match(/\b(chihuahua|cd\.?\s*ju[aá]rez|ju[aá]rez|delicias|cuauht[eé]moc|parral)\b/i);
+    if (chihMatch) {
+      const city = chihMatch[0].toLowerCase().includes('ju') ? 'Ciudad Juárez' : 'Chihuahua';
+      if (!state.jurisdiction.state) {
+        state.jurisdiction.state = 'Chihuahua';
+        state.jurisdiction.city = city;
+        state.jurisdiction.confirmed = true;
+      } else if (state.jurisdiction.city && state.jurisdiction.city.toLowerCase() !== city.toLowerCase()) {
+        const contraMsg = `Usuario indicó inicialmente ${state.jurisdiction.city} y posteriormente mencionó ${city}`;
+        if (!state.facts.contradictions.includes(contraMsg)) {
+          state.facts.contradictions.push(contraMsg);
+        }
+      }
+    }
+
+    // 2. Detect Address (calle, número, colonia, CP) - Captura exhaustiva multilínea y con comas
+    const addrFullMatch = text.match(/(?:(?:calle|av\.|avenida|privada|fracc\.|colonia|col\.|c\.?p\.?)\s+[^\n]{6,120}|(?:(?:[A-ZÁÉÍÓÚÑa-z]+\s+)+\d{1,5}(?:[,\s]+(?:colonia|col\.|fracc\.)\s+[A-ZÁÉÍÓÚÑa-z0-9\s]+)?(?:[,\s]+(?:c\.?p\.?|código postal)\s*\d{4,5})?))/i);
+    if (addrFullMatch && !state.identity.address) {
+      const capturedAddr = addrFullMatch[0].trim().replace(/\s+/g, ' ');
+      state.identity.address = capturedAddr;
+      
+      const cpMatch = capturedAddr.match(/\b(?:c\.?p\.?|código postal)?\s*(\d{5})\b/i);
+      if (cpMatch) {
+        state.identity.postal_code = cpMatch[1];
+      }
+
+      const colMatch = capturedAddr.match(/\b(?:colonia|col\.|fracc\.)\s+([A-ZÁÉÍÓÚÑa-z0-9\s]+?)(?:,|$|\bc\.?p|\bchihuahua)/i);
+      if (colMatch) {
+        state.identity.colonia = colMatch[1].trim();
+      }
+
+      const confirmedFact = `Domicilio procesal verificado: ${capturedAddr}`;
+      if (!state.facts.confirmed.includes(confirmedFact)) {
+        state.facts.confirmed.push(confirmedFact);
+      }
+    }
+
+    // 3. Detect Full Name
+    const nameMatch = text.match(/\b(?:me llamo|mi nombre es|soy)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){1,3})\b/i);
+    if (nameMatch && !state.identity.full_name) {
+      state.identity.full_name = nameMatch[1].trim();
+      const confirmedName = `Nombre de la promovente: ${nameMatch[1].trim()}`;
+      if (!state.facts.confirmed.includes(confirmedName)) {
+        state.facts.confirmed.push(confirmedName);
+      }
+    }
+
+    // 4. Detect Counterparty
+    const counterMatch = text.match(/\b(mi (?:ex)?espos[oa]|mi (?:ex)?pareja|el pap[aá]|la mam[aá]|demandad[oa]|agresor(?:a)?)\s+(?:se llama\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){0,3})\b/i);
+    if (counterMatch) {
+      const pName = counterMatch[2].trim();
+      if (!state.participants.some((p: any) => p.name.toLowerCase() === pName.toLowerCase())) {
+        state.participants.push({
+          name: pName,
+          role: 'contraparte',
+          relationship: counterMatch[1].trim()
+        });
+      }
+    }
+
+    // 5. Detect Children / Minors
+    const childMatch = text.match(/\b(mi (?:hij[oa]|menor)|mis hij[oa]s)\s+(?:se llama[n]?\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){0,3})\b/i);
+    if (childMatch) {
+      const cName = childMatch[2].trim();
+      if (!state.participants.some((p: any) => p.name.toLowerCase() === cName.toLowerCase())) {
+        state.participants.push({
+          name: cName,
+          role: 'hijo_menor',
+          relationship: childMatch[1].trim()
+        });
+      }
+    }
+
+    // 6. Detect Uncertainties / Filiación / Paternidad no confirmada
+    const paternityDoubtMatch = text.match(/\b(no s[eé]\b[^\.\n]*?\b(?:pap[aá]|padre)|dudas?\b[^\.\n]*?\bpaternidad|prueba de adn|no est[aá] reconocid[oa]|desconoce[^\.\n]*?paternidad|insegur[ao][^\.\n]*?paternidad)\b/i);
+    if (paternityDoubtMatch) {
+      const doubtItem = "Incertidumbre expresa sobre la filiación/paternidad. Pendiente de resolución por vía pericial o reconocimiento legal.";
+      if (!state.facts.unknown.includes(doubtItem)) {
+        state.facts.unknown.push(doubtItem);
+      }
+    }
+  });
+
+  return state;
+};
+
+export async function generateResponse(
+  userMessages: any[], 
+  userName?: string,
+  caseContext?: {
+    caseId?: string;
+    status?: string;
+    jurisdiction?: { state?: string | null; city?: string | null; authority?: string | null };
+    structuredState?: any;
+    identity?: { full_name?: string | null; address?: string | null };
+  }
+) {
   const deepseekKey = (process.env.DEEPSEEK_API_KEY || "").trim();
   const moonshotKey = (process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.KIMI_KEY || "").trim();
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
@@ -92,16 +235,97 @@ export async function generateResponse(userMessages: any[], userName?: string) {
     lastMoonshotKey = moonshotKey;
   }
 
-  const userPromptAddon = userName && userName.trim().length > 0 && userName !== 'Usuario'
-    ? `\n\nDATOS DEL CLIENTE:\nEl usuario con quien hablas se llama "${userName.trim()}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`
-    : '';
+  // --- CONTEXT BUILDER (FASE 3) ---
+  const stateName = caseContext?.jurisdiction?.state || caseContext?.structuredState?.jurisdiction?.state || null;
+  const cityName = caseContext?.jurisdiction?.city || caseContext?.structuredState?.jurisdiction?.city || null;
+  const authorityName = caseContext?.jurisdiction?.authority || caseContext?.structuredState?.jurisdiction?.authority || null;
+  
+  const systemDateTime = getSystemDateTimeContext(stateName);
+  
+  const clientDisplayName = caseContext?.identity?.full_name || caseContext?.structuredState?.identity?.full_name || userName || 'Usuario';
+  const clientAddress = caseContext?.identity?.address || caseContext?.structuredState?.identity?.address || null;
+
+  const confirmedFacts: string[] = caseContext?.structuredState?.facts?.confirmed || [];
+  const allegedFacts: string[] = caseContext?.structuredState?.facts?.alleged || [];
+  const unknownFacts: string[] = caseContext?.structuredState?.facts?.unknown || [];
+  const contradictions: string[] = caseContext?.structuredState?.facts?.contradictions || [];
+  const participants: Array<{ name: string; role: string; relationship?: string }> = caseContext?.structuredState?.participants || [];
+  const currentStrategy: string | null = caseContext?.structuredState?.strategy?.current || null;
+
+  // Build Context Blocks
+  const temporalBlock = `
+====================================================================
+METADATOS OFICIALES Y TEMPORALES DEL SISTEMA (FUENTE DE VERDAD VIGENTE)
+====================================================================
+- FECHA ACTUAL DEL SISTEMA: ${systemDateTime.dateFormatted}
+- HORA LOCAL: ${systemDateTime.timeFormatted} (${systemDateTime.timeZone})
+- AÑO EN CURSO: ${systemDateTime.year}
+- ESTADO DEL EXPEDIENTE: ${(caseContext?.status || 'active').toUpperCase()}
+
+REGLA TEMPORAL CRÍTICA:
+Estamos en el año ${systemDateTime.year}. Toda fecha de firma, emisión o formalización de documentos legales DEBE ser la fecha actual de hoy (${systemDateTime.dateFormatted}).
+Queda TERMINANTEMENTE PROHIBIDO usar fechas de entrenamiento como mayo de 2024 o años anteriores para la emisión de escritos.
+`;
+
+  const jurisdictionBlock = `
+====================================================================
+JURISDICCIÓN PROCESAL OBLIGATORIA (FUENTE DE VERDAD)
+====================================================================
+- PAÍS: México
+- ENTIDAD FEDERATIVA (ESTADO): ${stateName || 'Pendiente de confirmación'}
+- CIUDAD / MUNICIPIO: ${cityName || 'Pendiente de confirmación'}
+- SEDE / AUTORIDAD COMPETENTE: ${authorityName || 'Juzgados Familiares / Penales / Civiles de la localidad'}
+
+REGLA DE JURISDICCIÓN:
+${stateName ? `La jurisdicción de este expediente es ${stateName}${cityName ? ` (${cityName})` : ''}. TIENES ESTRICTAMENTE PROHIBIDO cambiarla a la Ciudad de México o basarte en ordenamientos de la CDMX. Cita y aplica las leyes y juzgados de ${stateName}.` : `Si el usuario aún no ha indicado su ciudad o estado, pregúntasela amablemente antes de redactar cualquier documento. PROHIBIDO asumir por defecto la Ciudad de México.`}
+`;
+
+  const identityBlock = `
+====================================================================
+IDENTIDAD Y PARTICIPANTES DEL CASO
+====================================================================
+- PROMOVENTE / USUARIO: ${clientDisplayName}
+- DOMICILIO PROCESAL DEL PROMOVENTE: ${clientAddress || 'Pendiente de recabar amablemente en el chat'}
+- PARTICIPANTES Y ROLES REGISTRADOS:
+${participants.length > 0 ? participants.map(p => `  * ${p.name} (Rol: ${p.role}${p.relationship ? `, Vínculo: ${p.relationship}` : ''})`).join('\n') : '  * Aún no hay terceros individualizados en el expediente.'}
+`;
+
+  const structuredMemoryBlock = `
+====================================================================
+MEMORIA ESTRUCTURADA DEL CASO (HECHOS VS CONCLUSIONES)
+====================================================================
+HECHOS CONFIRMADOS POR EL USUARIO (NO VOLVER A PREGUNTARLOS):
+${confirmedFacts.length > 0 ? confirmedFacts.map(f => `  * ${f}`).join('\n') : '  * Ningún hecho formal confirmado aún.'}
+
+INCERTIDUMBRES / DUDAS MANIFIESTAS DEL USUARIO:
+${unknownFacts.length > 0 ? unknownFacts.map(u => `  * ${u}`).join('\n') : '  * Ninguna incertidumbre manifiesta registrada.'}
+
+HECHOS ALEGADOS / POR VERIFICAR:
+${allegedFacts.length > 0 ? allegedFacts.map(a => `  * ${a}`).join('\n') : '  * No hay alegaciones pendientes.'}
+
+CONTRADICCIONES DETECTADAS (ACLARAR CON EL USUARIO ANTES DE REDACTAR):
+${contradictions.length > 0 ? contradictions.map(c => `  * ATENCIÓN: ${c}`).join('\n') : '  * Ninguna contradicción detectada.'}
+
+ESTRATEGIA ACTUAL REGISTRADA:
+${currentStrategy ? `  * ${currentStrategy}` : '  * En diagnóstico jurídico preliminar.'}
+
+REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
+1. Los hechos confirmados arriba son DATOS SEGUROS. Aunque hayan sido proporcionados al inicio de la conversación, NO los vuelvas a preguntar.
+2. NO confundas tus propias sugerencias o análisis jurídicos con hechos confirmados del usuario.
+3. CERO PLACEHOLDERS: Si falta el nombre completo, el domicilio exacto o la ciudad, NO generes el escrito legal con corchetes de relleno (como [ TU CALLE ] o [ NOMBRE ]). Pídele amablemente al usuario el dato que falta en tu mensaje de chat.
+4. REGLA ESTRICTA DE FILIACIÓN: Si existe duda de paternidad manifestada por la usuaria, queda ESTRICTAMENTE PROHIBIDO asumir paternidad automática o redactar demandas atribuyendo obligaciones de alimentos sin plantear la acción prejudicial/judicial de investigación o desconocimiento de paternidad o prueba pericial genética en ADN.
+5. REGLA DE JURISDICCIÓN ESTRICTA: La jurisdicción procesal es ${stateName || 'Chihuahua'}. Queda TERMINANTEMENTE PROHIBIDO citar juzgados, códigos o dependencias de la Ciudad de México cuando el caso pertenezca a otra entidad federativa.
+`;
+
+  const userPromptAddon = `\n${temporalBlock}\n${jurisdictionBlock}\n${identityBlock}\n${structuredMemoryBlock}\n\nDATOS DEL CLIENTE:\nEl usuario se llama "${clientDisplayName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`;
 
   const effectiveSystemPrompt = `${JUSTINO_SYSTEM_PROMPT}${userPromptAddon}`;
 
-  // Reconstruct the payload with the server-side system prompt
+  // Assemble the messages: Server system prompt + recent dialogue window (up to 16 turns for conversational flow)
+  // Because the structuredMemoryBlock holds all permanent facts, no knowledge is lost even if earlier turns slide away.
   const secureMessages = [
     { role: 'system', content: effectiveSystemPrompt },
-    ...userMessages.filter(m => m.role === 'user' || m.role === 'assistant').slice(-12)
+    ...userMessages.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-16)
   ];
 
   const hasDeepSeek = Boolean(!deepseekAuthFailed && deepseekKey.length > 10 && !deepseekKey.includes('placeholder'));

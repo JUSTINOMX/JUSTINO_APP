@@ -75,13 +75,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
               }
             }
 
-            // Sync with client-side supabase session if available
+            // Ensure client-side Supabase session is established and verified
             if (supabase && cleanPassword) {
               const authEmail = `${cleanUsername}@justino.app`;
-              supabase.auth.signInWithPassword({
+              const { data: supaAuthData, error: supaAuthErr } = await supabase.auth.signInWithPassword({
                 email: authEmail,
                 password: cleanPassword
-              }).catch(() => {});
+              });
+
+              if (supaAuthErr || !supaAuthData?.session) {
+                console.warn("Client Supabase session sync failed:", supaAuthErr);
+                setError("No se pudo sincronizar la sesión segura con el servidor. Intenta de nuevo.");
+                setIsLoading(false);
+                return;
+              }
+
+              // Verify authenticated identity matches login payload
+              if (supaAuthData.user && supaAuthData.user.id !== loggedUser.id) {
+                console.error("User ID mismatch between server and client session");
+                setError("Inconsistencia de identidad detectada. Por favor reingresa tus credenciales.");
+                setIsLoading(false);
+                return;
+              }
             }
 
             onSuccess(loggedUser);
@@ -95,10 +110,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
         }
       } catch (fetchErr: any) {
         clearTimeout(timeoutId);
-        console.warn("Direct API login warning, attempting Supabase fallback:", fetchErr);
+        console.warn("Direct API login warning, attempting direct Supabase authentication:", fetchErr);
       }
 
-      // 2. Client-side fallback with Supabase SDK if server endpoint was unreachable
+      // 2. Direct Supabase SDK client-side authentication if backend proxy timed out or failed
       if (supabase) {
         const authEmail = `${cleanUsername}@justino.app`;
         const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -106,7 +121,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
           password: cleanPassword,
         });
 
-        if (authError) {
+        if (authError || !data?.session) {
           setError('Usuario o clave incorrectos. Por favor verifica tus datos.');
           setIsLoading(false);
           return;
@@ -114,7 +129,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
 
         if (data?.user) {
           const userMeta = data.user.user_metadata || {};
-          const preferredName = userMeta.preferred_name || localStorage.getItem('justino_preferred_name') || cleanUsername;
+          const preferredName = userMeta.preferred_name || cleanUsername;
           const loggedUser: User = {
             id: data.user.id,
             email: data.user.email || authEmail,
@@ -132,15 +147,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
         }
       }
 
-      // 3. Fallback preview session
-      const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_preferred_name') : '';
-      const fallbackUser: User = {
-        id: 'user_' + cleanUsername,
-        email: `${cleanUsername}@justino.app`,
-        username: cleanUsername,
-        preferredName: storedPref || cleanUsername
-      };
-      onSuccess(fallbackUser);
+      setError('No fue posible validar tu acceso de forma segura. Verifica tu conexión.');
     } catch (err: any) {
       console.error("Login Exception:", err);
       setError('Error al conectar. Por favor verifica tus datos e intenta nuevamente.');
