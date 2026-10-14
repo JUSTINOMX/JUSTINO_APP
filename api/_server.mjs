@@ -79,7 +79,115 @@ var deepseekAuthFailed = false;
 var moonshotAuthFailed = false;
 var lastDeepseekKey = "";
 var lastMoonshotKey = "";
-async function generateResponse(userMessages, userName) {
+var getSystemDateTimeContext = (stateName) => {
+  const now = /* @__PURE__ */ new Date();
+  const isChihuahua = stateName && /chihuahua/i.test(stateName);
+  const timeZone = isChihuahua ? "America/Chihuahua" : "America/Mexico_City";
+  const options = {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone
+  };
+  const dateFormatted = now.toLocaleDateString("es-MX", options);
+  const timeFormatted = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone });
+  const year = now.getFullYear();
+  return {
+    dateFormatted,
+    timeFormatted,
+    year,
+    timeZone
+  };
+};
+var extractCandidateFacts = (userMessages, existingState) => {
+  const state = existingState || {
+    identity: { full_name: null, address: null, city: null, state: null, postal_code: null },
+    jurisdiction: { country: "M\xE9xico", state: null, city: null, judicial_district: null, authority: null, source: null, confirmed: false },
+    participants: [],
+    facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+    dates: [],
+    amounts: [],
+    evidence: [],
+    strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+    actions: [],
+    decisions: [],
+    document_state: { current_documents: [], pending_documents: [] }
+  };
+  const onlyUserTexts = userMessages.filter((m) => m.role === "user").map((m) => String(m.content || ""));
+  onlyUserTexts.forEach((text) => {
+    const chihMatch = text.match(/\b(chihuahua|cd\.?\s*ju[aá]rez|ju[aá]rez|delicias|cuauht[eé]moc|parral)\b/i);
+    if (chihMatch) {
+      const city = chihMatch[0].toLowerCase().includes("ju") ? "Ciudad Ju\xE1rez" : "Chihuahua";
+      if (!state.jurisdiction.state) {
+        state.jurisdiction.state = "Chihuahua";
+        state.jurisdiction.city = city;
+        state.jurisdiction.confirmed = true;
+      } else if (state.jurisdiction.city && state.jurisdiction.city.toLowerCase() !== city.toLowerCase()) {
+        const contraMsg = `Usuario indic\xF3 inicialmente ${state.jurisdiction.city} y posteriormente mencion\xF3 ${city}`;
+        if (!state.facts.contradictions.includes(contraMsg)) {
+          state.facts.contradictions.push(contraMsg);
+        }
+      }
+    }
+    const addrFullMatch = text.match(/(?:(?:calle|av\.|avenida|privada|fracc\.|colonia|col\.|c\.?p\.?)\s+[^\n]{6,120}|(?:(?:[A-ZÁÉÍÓÚÑa-z]+\s+)+\d{1,5}(?:[,\s]+(?:colonia|col\.|fracc\.)\s+[A-ZÁÉÍÓÚÑa-z0-9\s]+)?(?:[,\s]+(?:c\.?p\.?|código postal)\s*\d{4,5})?))/i);
+    if (addrFullMatch && !state.identity.address) {
+      const capturedAddr = addrFullMatch[0].trim().replace(/\s+/g, " ");
+      state.identity.address = capturedAddr;
+      const cpMatch = capturedAddr.match(/\b(?:c\.?p\.?|código postal)?\s*(\d{5})\b/i);
+      if (cpMatch) {
+        state.identity.postal_code = cpMatch[1];
+      }
+      const colMatch = capturedAddr.match(/\b(?:colonia|col\.|fracc\.)\s+([A-ZÁÉÍÓÚÑa-z0-9\s]+?)(?:,|$|\bc\.?p|\bchihuahua)/i);
+      if (colMatch) {
+        state.identity.colonia = colMatch[1].trim();
+      }
+      const confirmedFact = `Domicilio procesal verificado: ${capturedAddr}`;
+      if (!state.facts.confirmed.includes(confirmedFact)) {
+        state.facts.confirmed.push(confirmedFact);
+      }
+    }
+    const nameMatch = text.match(/\b(?:me llamo|mi nombre es|soy)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){1,3})\b/i);
+    if (nameMatch && !state.identity.full_name) {
+      state.identity.full_name = nameMatch[1].trim();
+      const confirmedName = `Nombre de la promovente: ${nameMatch[1].trim()}`;
+      if (!state.facts.confirmed.includes(confirmedName)) {
+        state.facts.confirmed.push(confirmedName);
+      }
+    }
+    const counterMatch = text.match(/\b(mi (?:ex)?espos[oa]|mi (?:ex)?pareja|el pap[aá]|la mam[aá]|demandad[oa]|agresor(?:a)?)\s+(?:se llama\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){0,3})\b/i);
+    if (counterMatch) {
+      const pName = counterMatch[2].trim();
+      if (!state.participants.some((p) => p.name.toLowerCase() === pName.toLowerCase())) {
+        state.participants.push({
+          name: pName,
+          role: "contraparte",
+          relationship: counterMatch[1].trim()
+        });
+      }
+    }
+    const childMatch = text.match(/\b(mi (?:hij[oa]|menor)|mis hij[oa]s)\s+(?:se llama[n]?\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){0,3})\b/i);
+    if (childMatch) {
+      const cName = childMatch[2].trim();
+      if (!state.participants.some((p) => p.name.toLowerCase() === cName.toLowerCase())) {
+        state.participants.push({
+          name: cName,
+          role: "hijo_menor",
+          relationship: childMatch[1].trim()
+        });
+      }
+    }
+    const paternityDoubtMatch = text.match(/\b(no s[eé]\b[^\.\n]*?\b(?:pap[aá]|padre)|dudas?\b[^\.\n]*?\bpaternidad|prueba de adn|no est[aá] reconocid[oa]|desconoce[^\.\n]*?paternidad|insegur[ao][^\.\n]*?paternidad)\b/i);
+    if (paternityDoubtMatch) {
+      const doubtItem = "Incertidumbre expresa sobre la filiaci\xF3n/paternidad. Pendiente de resoluci\xF3n por v\xEDa pericial o reconocimiento legal.";
+      if (!state.facts.unknown.includes(doubtItem)) {
+        state.facts.unknown.push(doubtItem);
+      }
+    }
+  });
+  return state;
+};
+async function generateResponse(userMessages, userName, caseContext) {
   const deepseekKey = (process.env.DEEPSEEK_API_KEY || "").trim();
   const moonshotKey = (process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.KIMI_KEY || "").trim();
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
@@ -91,14 +199,90 @@ async function generateResponse(userMessages, userName) {
     moonshotAuthFailed = false;
     lastMoonshotKey = moonshotKey;
   }
-  const userPromptAddon = userName && userName.trim().length > 0 && userName !== "Usuario" ? `
+  const stateName = caseContext?.jurisdiction?.state || caseContext?.structuredState?.jurisdiction?.state || null;
+  const cityName = caseContext?.jurisdiction?.city || caseContext?.structuredState?.jurisdiction?.city || null;
+  const authorityName = caseContext?.jurisdiction?.authority || caseContext?.structuredState?.jurisdiction?.authority || null;
+  const systemDateTime = getSystemDateTimeContext(stateName);
+  const clientDisplayName = caseContext?.identity?.full_name || caseContext?.structuredState?.identity?.full_name || userName || "Usuario";
+  const clientAddress = caseContext?.identity?.address || caseContext?.structuredState?.identity?.address || null;
+  const confirmedFacts = caseContext?.structuredState?.facts?.confirmed || [];
+  const allegedFacts = caseContext?.structuredState?.facts?.alleged || [];
+  const unknownFacts = caseContext?.structuredState?.facts?.unknown || [];
+  const contradictions = caseContext?.structuredState?.facts?.contradictions || [];
+  const participants = caseContext?.structuredState?.participants || [];
+  const currentStrategy = caseContext?.structuredState?.strategy?.current || null;
+  const temporalBlock = `
+====================================================================
+METADATOS OFICIALES Y TEMPORALES DEL SISTEMA (FUENTE DE VERDAD VIGENTE)
+====================================================================
+- FECHA ACTUAL DEL SISTEMA: ${systemDateTime.dateFormatted}
+- HORA LOCAL: ${systemDateTime.timeFormatted} (${systemDateTime.timeZone})
+- A\xD1O EN CURSO: ${systemDateTime.year}
+- ESTADO DEL EXPEDIENTE: ${(caseContext?.status || "active").toUpperCase()}
+
+REGLA TEMPORAL CR\xCDTICA:
+Estamos en el a\xF1o ${systemDateTime.year}. Toda fecha de firma, emisi\xF3n o formalizaci\xF3n de documentos legales DEBE ser la fecha actual de hoy (${systemDateTime.dateFormatted}).
+Queda TERMINANTEMENTE PROHIBIDO usar fechas de entrenamiento como mayo de 2024 o a\xF1os anteriores para la emisi\xF3n de escritos.
+`;
+  const jurisdictionBlock = `
+====================================================================
+JURISDICCI\xD3N PROCESAL OBLIGATORIA (FUENTE DE VERDAD)
+====================================================================
+- PA\xCDS: M\xE9xico
+- ENTIDAD FEDERATIVA (ESTADO): ${stateName || "Pendiente de confirmaci\xF3n"}
+- CIUDAD / MUNICIPIO: ${cityName || "Pendiente de confirmaci\xF3n"}
+- SEDE / AUTORIDAD COMPETENTE: ${authorityName || "Juzgados Familiares / Penales / Civiles de la localidad"}
+
+REGLA DE JURISDICCI\xD3N:
+${stateName ? `La jurisdicci\xF3n de este expediente es ${stateName}${cityName ? ` (${cityName})` : ""}. TIENES ESTRICTAMENTE PROHIBIDO cambiarla a la Ciudad de M\xE9xico o basarte en ordenamientos de la CDMX. Cita y aplica las leyes y juzgados de ${stateName}.` : `Si el usuario a\xFAn no ha indicado su ciudad o estado, preg\xFAntasela amablemente antes de redactar cualquier documento. PROHIBIDO asumir por defecto la Ciudad de M\xE9xico.`}
+`;
+  const identityBlock = `
+====================================================================
+IDENTIDAD Y PARTICIPANTES DEL CASO
+====================================================================
+- PROMOVENTE / USUARIO: ${clientDisplayName}
+- DOMICILIO PROCESAL DEL PROMOVENTE: ${clientAddress || "Pendiente de recabar amablemente en el chat"}
+- PARTICIPANTES Y ROLES REGISTRADOS:
+${participants.length > 0 ? participants.map((p) => `  * ${p.name} (Rol: ${p.role}${p.relationship ? `, V\xEDnculo: ${p.relationship}` : ""})`).join("\n") : "  * A\xFAn no hay terceros individualizados en el expediente."}
+`;
+  const structuredMemoryBlock = `
+====================================================================
+MEMORIA ESTRUCTURADA DEL CASO (HECHOS VS CONCLUSIONES)
+====================================================================
+HECHOS CONFIRMADOS POR EL USUARIO (NO VOLVER A PREGUNTARLOS):
+${confirmedFacts.length > 0 ? confirmedFacts.map((f) => `  * ${f}`).join("\n") : "  * Ning\xFAn hecho formal confirmado a\xFAn."}
+
+INCERTIDUMBRES / DUDAS MANIFIESTAS DEL USUARIO:
+${unknownFacts.length > 0 ? unknownFacts.map((u) => `  * ${u}`).join("\n") : "  * Ninguna incertidumbre manifiesta registrada."}
+
+HECHOS ALEGADOS / POR VERIFICAR:
+${allegedFacts.length > 0 ? allegedFacts.map((a) => `  * ${a}`).join("\n") : "  * No hay alegaciones pendientes."}
+
+CONTRADICCIONES DETECTADAS (ACLARAR CON EL USUARIO ANTES DE REDACTAR):
+${contradictions.length > 0 ? contradictions.map((c) => `  * ATENCI\xD3N: ${c}`).join("\n") : "  * Ninguna contradicci\xF3n detectada."}
+
+ESTRATEGIA ACTUAL REGISTRADA:
+${currentStrategy ? `  * ${currentStrategy}` : "  * En diagn\xF3stico jur\xEDdico preliminar."}
+
+REGLAS DE RAZONAMIENTO Y PROTECCI\xD3N DE DATOS:
+1. Los hechos confirmados arriba son DATOS SEGUROS. Aunque hayan sido proporcionados al inicio de la conversaci\xF3n, NO los vuelvas a preguntar.
+2. NO confundas tus propias sugerencias o an\xE1lisis jur\xEDdicos con hechos confirmados del usuario.
+3. CERO PLACEHOLDERS: Si falta el nombre completo, el domicilio exacto o la ciudad, NO generes el escrito legal con corchetes de relleno (como [ TU CALLE ] o [ NOMBRE ]). P\xEDdele amablemente al usuario el dato que falta en tu mensaje de chat.
+4. REGLA ESTRICTA DE FILIACI\xD3N: Si existe duda de paternidad manifestada por la usuaria, queda ESTRICTAMENTE PROHIBIDO asumir paternidad autom\xE1tica o redactar demandas atribuyendo obligaciones de alimentos sin plantear la acci\xF3n prejudicial/judicial de investigaci\xF3n o desconocimiento de paternidad o prueba pericial gen\xE9tica en ADN.
+5. REGLA DE JURISDICCI\xD3N ESTRICTA: La jurisdicci\xF3n procesal es ${stateName || "Chihuahua"}. Queda TERMINANTEMENTE PROHIBIDO citar juzgados, c\xF3digos o dependencias de la Ciudad de M\xE9xico cuando el caso pertenezca a otra entidad federativa.
+`;
+  const userPromptAddon = `
+${temporalBlock}
+${jurisdictionBlock}
+${identityBlock}
+${structuredMemoryBlock}
 
 DATOS DEL CLIENTE:
-El usuario con quien hablas se llama "${userName.trim()}". Dir\xEDgete a \xE9l o ella por su nombre con calidez, respeto y empat\xEDa.` : "";
+El usuario se llama "${clientDisplayName}". Dir\xEDgete a \xE9l o ella por su nombre con calidez, respeto y empat\xEDa.`;
   const effectiveSystemPrompt = `${JUSTINO_SYSTEM_PROMPT}${userPromptAddon}`;
   const secureMessages = [
     { role: "system", content: effectiveSystemPrompt },
-    ...userMessages.filter((m) => m.role === "user" || m.role === "assistant").slice(-12)
+    ...userMessages.filter((m) => m.role === "user" || m.role === "assistant").slice(-16)
   ];
   const hasDeepSeek = Boolean(!deepseekAuthFailed && deepseekKey.length > 10 && !deepseekKey.includes("placeholder"));
   const hasMoonshot = Boolean(!moonshotAuthFailed && moonshotKey.length > 10 && !moonshotKey.includes("placeholder"));
@@ -106,7 +290,7 @@ El usuario con quien hablas se llama "${userName.trim()}". Dir\xEDgete a \xE9l o
   const tryGemini = async () => {
     if (!hasGemini) return null;
     try {
-      console.log("[AI Provider] [3/3] Solicitando inferencia ultra-r\xE1pida a Gemini...");
+      console.log("[AI Provider] Solicitando inferencia ultra-r\xE1pida a Gemini...");
       const genAI = new GoogleGenAI({
         apiKey: geminiKey,
         httpOptions: {
@@ -136,8 +320,7 @@ ${text}`;
       }
       const modelsToTry = [
         "gemini-3.1-flash-lite",
-        "gemini-flash-latest",
-        "gemini-3.8-flash"
+        "gemini-flash-latest"
       ];
       for (const modelName of modelsToTry) {
         try {
@@ -146,8 +329,7 @@ ${text}`;
             contents,
             config: {
               systemInstruction: effectiveSystemPrompt,
-              temperature: 0.25,
-              thinkingConfig: { thinkingBudget: 0 }
+              temperature: 0.25
             }
           });
           let text = result.text || "";
@@ -174,9 +356,9 @@ ${text}`;
   };
   if (hasDeepSeek) {
     try {
-      console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek (Default)...`);
+      console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4e3);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
@@ -202,57 +384,48 @@ ${text}`;
         const errText = await response.text().catch(() => "");
         if (response.status === 401 || response.status === 403) {
           deepseekAuthFailed = true;
-          console.warn(`[AI Provider] Clave de DeepSeek no v\xE1lida o expirada (HTTP ${response.status}). Pasando inmediatamente a Kimi / Moonshot...`);
+          console.warn(`[AI Provider] Clave de DeepSeek no v\xE1lida (HTTP ${response.status}). Pasando a respaldo...`);
         } else {
-          console.warn(`[AI Provider] DeepSeek devolvi\xF3 c\xF3digo HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Kimi / Moonshot...`);
+          console.warn(`[AI Provider] DeepSeek c\xF3digo HTTP ${response.status}: ${errText.substring(0, 100)}`);
         }
       }
     } catch (error) {
-      console.warn(`[AI Provider] Error o timeout con DeepSeek (${error.message}). Pasando a Kimi / Moonshot...`);
+      console.warn(`[AI Provider] Timeout o error con DeepSeek (${error.message}). Continuando con respaldo...`);
     }
   }
   if (hasMoonshot) {
-    const endpointsToTry = [
-      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.7-code-highspeed", temp: 1 },
-      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.6", temp: 1 },
-      { url: "https://api.moonshot.cn/v1/chat/completions", model: "moonshot-v1-8k", temp: 0.25 }
-    ];
-    for (const ep of endpointsToTry) {
-      try {
-        console.log(`[AI Provider] [2/3] Solicitando inferencia a Kimi (${ep.model})...`);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6e3);
-        const response = await fetch(ep.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${moonshotKey}`
-          },
-          body: JSON.stringify({
-            model: ep.model,
-            messages: secureMessages,
-            temperature: ep.temp,
-            max_tokens: 3500
-          }),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (response.ok) {
-          const json = await response.json();
-          if (json?.choices?.[0]?.message?.content) {
-            console.log(`[AI Provider] Respuesta generada exitosamente con Kimi (${ep.model}).`);
-            return json;
-          }
-        } else {
-          const errText = await response.text().catch(() => "");
-          console.warn(`[AI Provider] Kimi (${ep.model}) c\xF3digo HTTP ${response.status}: ${errText.substring(0, 100)}`);
-          if (response.status === 401 && ep.url.includes(".cn")) {
-            moonshotAuthFailed = true;
-          }
+    try {
+      console.log(`[AI Provider] [2/3] Solicitando inferencia a Kimi / Moonshot...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3e3);
+      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${moonshotKey}`
+        },
+        body: JSON.stringify({
+          model: "moonshot-v1-8k",
+          messages: secureMessages,
+          temperature: 0.25,
+          max_tokens: 3500
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (response.ok) {
+        const json = await response.json();
+        if (json?.choices?.[0]?.message?.content) {
+          console.log(`[AI Provider] Respuesta generada exitosamente con Kimi.`);
+          return json;
         }
-      } catch (error) {
-        console.warn(`[AI Provider] Error o timeout con Kimi (${ep.model}): ${error.message}`);
+      } else {
+        moonshotAuthFailed = true;
+        console.warn(`[AI Provider] Moonshot devolvi\xF3 status ${response.status}. Marcando inactivo.`);
       }
+    } catch (error) {
+      moonshotAuthFailed = true;
+      console.warn(`[AI Provider] Timeout o fallo en Moonshot (${error.message}). Pasando a Gemini...`);
     }
   }
   if (hasGemini) {
@@ -816,16 +989,17 @@ var paymentLimiter = rateLimit({
 app.use("/api/", standardLimiter);
 var authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const userHeader = req.headers["x-user-id"];
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
     if (token) {
       try {
         const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || config.supabaseAnonKey;
-        if (supabaseUrl && supabaseAnonKey) {
+        const keyToUse = serviceRoleKey || supabaseAnonKey;
+        if (supabaseUrl && keyToUse) {
           const { createClient: createClient2 } = await import("@supabase/supabase-js");
-          const supabase = createClient2(supabaseUrl, supabaseAnonKey);
+          const supabase = createClient2(supabaseUrl, keyToUse);
           const { data: { user }, error } = await supabase.auth.getUser(token);
           if (!error && user) {
             req.user = user;
@@ -837,15 +1011,10 @@ var authMiddleware = async (req, res, next) => {
       }
     }
   }
-  if (userHeader || req.body && req.body.userId) {
-    req.user = {
-      id: userHeader || req.body.userId,
-      email: req.body && req.body.email || `${userHeader}@justino.app`
-    };
-    return next();
-  }
-  req.user = { id: "client_active_session", role: "client" };
-  return next();
+  return res.status(401).json({
+    error: "No autorizado. Se requiere una sesi\xF3n v\xE1lida o token Bearer.",
+    code: "UNAUTHORIZED"
+  });
 };
 var isAdminMiddleware = async (req, res, next) => {
   const user = req.user;
@@ -1509,7 +1678,11 @@ app.get("/api/v1/admin/stats", authMiddleware, isAdminMiddleware, async (req, re
 var chatHandler = async (req, res) => {
   try {
     debugLog(`Incoming chat request to ${req.url}`);
-    const { messages, userName } = req.body;
+    const { messages, userName, caseId } = req.body;
+    const authenticatedUser = req.user;
+    if (!authenticatedUser?.id) {
+      return res.status(401).json({ error: "Sesi\xF3n no autenticada o token inv\xE1lido." });
+    }
     if (!messages || !Array.isArray(messages)) {
       debugLog("Error: Invalid messages format");
       return res.status(400).json({ error: "Messages array is required" });
@@ -1529,8 +1702,99 @@ var chatHandler = async (req, res) => {
         error: "Lo siento, mi capacidad est\xE1 limitada estrictamente al asesoramiento legal en Justino."
       });
     }
-    const data = await generateResponse(userMessages, userName);
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    let currentCase = null;
+    let supabaseAdmin = null;
+    if (supabaseUrl && serviceRoleKey) {
+      const { createClient: createClient2 } = await import("@supabase/supabase-js");
+      supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
+      if (caseId) {
+        const { data: specificCase, error: specError } = await supabaseAdmin.from("legal_cases").select("*").eq("id", caseId).single();
+        if (specificCase) {
+          if (specificCase.user_id !== authenticatedUser.id) {
+            debugLog(`[SECURITY VIOLATION] Usuario ${authenticatedUser.id} intent\xF3 acceder al caso ${caseId} que pertenece a ${specificCase.user_id}`);
+            return res.status(403).json({
+              error: "Acceso denegado: no eres el propietario de este expediente.",
+              code: "FORBIDDEN"
+            });
+          }
+          currentCase = specificCase;
+        } else {
+          return res.status(404).json({
+            error: "Expediente no encontrado.",
+            code: "CASE_NOT_FOUND"
+          });
+        }
+      } else {
+        const { data: casesFound } = await supabaseAdmin.from("legal_cases").select("*").eq("user_id", authenticatedUser.id).order("updated_at", { ascending: false }).limit(1);
+        if (casesFound && casesFound.length > 0) {
+          currentCase = casesFound[0];
+        }
+      }
+    }
+    if (currentCase && currentCase.status === "closed") {
+      debugLog(`[BLOQUEO DE CASO CERRADO] Expediente ${currentCase.id} est\xE1 CERRADO. Bloqueando llamada a LLM.`);
+      return res.status(403).json({
+        error: "Este expediente se encuentra formalmente CERRADO. No es posible generar nuevas consultas, estrategias o documentos sobre un asunto finalizado.",
+        choices: [{
+          message: {
+            content: "\u{1F512} Este expediente est\xE1 formalmente cerrado. No es posible recibir nuevos mensajes ni generar documentos sobre un caso finalizado. Puedes consultar tu expediente o iniciar un nuevo tr\xE1mite legal seleccionando 'Nuevo Caso'."
+          },
+          finish_reason: "stop"
+        }],
+        caseStatus: "closed"
+      });
+    }
+    const existingStructuredState = currentCase?.structured_state || {
+      identity: { full_name: currentCase?.victim_name || userName || null, address: null, city: currentCase?.city_jurisdiction || null, state: currentCase?.state_jurisdiction || null, postal_code: null },
+      jurisdiction: { country: "M\xE9xico", state: currentCase?.state_jurisdiction || null, city: currentCase?.city_jurisdiction || null, judicial_district: null, authority: null, source: null, confirmed: !!currentCase?.state_jurisdiction },
+      participants: [],
+      facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+      dates: [],
+      amounts: [],
+      evidence: [],
+      strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+      actions: [],
+      decisions: [],
+      document_state: { current_documents: [], pending_documents: [] }
+    };
+    const updatedStructuredState = extractCandidateFacts(userMessages, existingStructuredState);
+    const caseContext = {
+      caseId: currentCase?.id,
+      status: currentCase?.status || "active",
+      jurisdiction: {
+        state: currentCase?.state_jurisdiction || updatedStructuredState.jurisdiction?.state,
+        city: currentCase?.city_jurisdiction || updatedStructuredState.jurisdiction?.city
+      },
+      structuredState: updatedStructuredState,
+      identity: {
+        full_name: updatedStructuredState.identity?.full_name || userName,
+        address: updatedStructuredState.identity?.address
+      }
+    };
+    const data = await generateResponse(userMessages, userName, caseContext);
     debugLog(`AI response generated successfully for ${req.url}`);
+    if (currentCase?.id && supabaseAdmin) {
+      try {
+        const updatePayload = {
+          structured_state: updatedStructuredState,
+          updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        if (updatedStructuredState.jurisdiction?.state && (!currentCase.state_jurisdiction || currentCase.state_jurisdiction.includes("Por definir") || currentCase.state_jurisdiction.includes("Nacional"))) {
+          updatePayload.state_jurisdiction = updatedStructuredState.jurisdiction.state;
+          if (updatedStructuredState.jurisdiction.city) {
+            updatePayload.city_jurisdiction = updatedStructuredState.jurisdiction.city;
+          }
+        }
+        if (updatedStructuredState.identity?.full_name && (!currentCase.victim_name || currentCase.victim_name === "Usuario")) {
+          updatePayload.victim_name = updatedStructuredState.identity.full_name;
+        }
+        await supabaseAdmin.from("legal_cases").update(updatePayload).eq("id", currentCase.id);
+      } catch (saveErr) {
+        console.warn("Aviso al guardar structured_state:", saveErr);
+      }
+    }
     res.json(data);
   } catch (error) {
     debugLog(`AI Proxy Error at ${req.url}: ${error.message}`);
@@ -1539,6 +1803,138 @@ var chatHandler = async (req, res) => {
 };
 app.post("/api/chat", authMiddleware, aiLimiter, chatHandler);
 app.post("/api/v1/chat", authMiddleware, aiLimiter, chatHandler);
+app.post("/api/v1/cases/new", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { title, caseType, stateJurisdiction, cityJurisdiction } = req.body;
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no est\xE1 configurado." });
+    }
+    const { createClient: createClient2 } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
+    const initialStructuredState = {
+      identity: { full_name: null, address: null, city: cityJurisdiction || null, state: stateJurisdiction || null, postal_code: null },
+      jurisdiction: { country: "M\xE9xico", state: stateJurisdiction || null, city: cityJurisdiction || null, judicial_district: null, authority: null, confirmed: false },
+      participants: [],
+      facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+      evidence: [],
+      dates: [],
+      amounts: [],
+      strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
+      actions: [],
+      decisions: [],
+      document_state: { current_documents: [], pending_documents: [] }
+    };
+    const newCasePayload = {
+      user_id: userId,
+      title: title || "Nuevo Expediente Legal",
+      case_type: caseType || "general",
+      status: "active",
+      state_jurisdiction: stateJurisdiction || "Nacional / M\xE9xico",
+      city_jurisdiction: cityJurisdiction || "Por definir",
+      structured_state: initialStructuredState,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const { data: newCase, error: insertErr } = await supabaseAdmin.from("legal_cases").insert([newCasePayload]).select().single();
+    if (insertErr) {
+      const { data: fbCase, error: fbErr } = await supabaseAdmin.from("legal_cases").insert([{
+        user_id: userId,
+        title: title || "Nuevo Expediente Legal",
+        case_type: caseType || "general",
+        status: "active",
+        state_jurisdiction: stateJurisdiction || "Nacional / M\xE9xico",
+        city_jurisdiction: cityJurisdiction || "Por definir",
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }]).select().single();
+      if (fbErr) throw fbErr;
+      return res.json({ success: true, case: fbCase });
+    }
+    console.log(`[NEW CASE] Nuevo caso creado con \xE9xito: ${newCase.id} para usuario ${userId}`);
+    res.json({ success: true, case: newCase });
+  } catch (err) {
+    console.error("[NEW CASE ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error al crear nuevo expediente." });
+  }
+});
+app.post("/api/v1/cases/close", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { caseId } = req.body;
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no est\xE1 configurado." });
+    }
+    const { createClient: createClient2 } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
+    let query = supabaseAdmin.from("legal_cases").update({
+      status: "closed",
+      closed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("user_id", userId);
+    if (caseId) {
+      query = query.eq("id", caseId);
+    }
+    const { error: updateError } = await query;
+    if (updateError) {
+      await supabaseAdmin.from("legal_cases").update({
+        status: "closed",
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      }).eq("user_id", userId);
+    }
+    console.log(`[CASE CLOSURE] Caso cerrado formalmente en Supabase para user: ${userId}`);
+    res.json({ success: true, status: "closed", closed_at: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch (err) {
+    console.error("[CASE CLOSURE ERROR]:", err);
+    res.status(500).json({ error: err.message || "Error al cerrar caso en base de datos." });
+  }
+});
+app.get("/api/v1/cases/status", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const caseId = req.query.caseId;
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no est\xE1 configurado." });
+    }
+    const { createClient: createClient2 } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
+    let query = supabaseAdmin.from("legal_cases").select("*").eq("user_id", userId);
+    if (caseId) {
+      query = query.eq("id", caseId);
+    }
+    const { data: cases, error } = await query.order("updated_at", { ascending: false }).limit(1);
+    if (error || !cases || cases.length === 0) {
+      return res.json({ status: "active", isClosed: false });
+    }
+    const currentCase = cases[0];
+    res.json({
+      caseId: currentCase.id,
+      status: currentCase.status || "active",
+      isClosed: currentCase.status === "closed",
+      closedAt: currentCase.closed_at || null,
+      structuredState: currentCase.structured_state || null,
+      jurisdiction: {
+        state: currentCase.state_jurisdiction,
+        city: currentCase.city_jurisdiction
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.post("/api/v1/stripe/create-checkout", async (req, res) => {
   try {
     const { email, origin: clientOrigin } = req.body;
@@ -1632,7 +2028,7 @@ app.all("/api/*", (req, res) => {
   res.status(404).json({ error: "Ruta de API no encontrada", path: req.url });
 });
 setupBlogRoutes(app);
-var isServerless = !!process.env.VERCEL;
+var isServerless = !!process.env.VERCEL || !!process.env.NOW_REGION || !!process.env.AWS_LAMBDA_FUNCTION_NAME || Boolean(process.env.SERVERLESS);
 if (!isServerless) {
   if (process.env.NODE_ENV !== "production") {
     debugLog("Starting in DEVELOPMENT mode with Vite middleware");

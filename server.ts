@@ -1429,7 +1429,7 @@ app.all("/api/*", (req, res) => {
 setupBlogRoutes(app);
 
 // Vite for dev / Static for production
-const isServerless = !!process.env.VERCEL;
+const isServerless = !!process.env.VERCEL || !!process.env.NOW_REGION || !!process.env.AWS_LAMBDA_FUNCTION_NAME || Boolean(process.env.SERVERLESS);
 if (!isServerless) {
   if (process.env.NODE_ENV !== "production") {
     debugLog("Starting in DEVELOPMENT mode with Vite middleware");

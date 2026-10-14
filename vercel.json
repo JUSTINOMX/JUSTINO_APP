@@ -3,12 +3,17 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/server.ts": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/server" },
-    { "source": "/blog", "destination": "/api/server" },
-    { "source": "/blog/(.*)", "destination": "/api/server" },
-    { "source": "/sitemap.xml", "destination": "/api/server" },
-    { "source": "/robots.txt", "destination": "/api/server" },
+    { "source": "/api/(.*)", "destination": "/api/server?_route=$1" },
+    { "source": "/blog", "destination": "/api/server?_route=blog" },
+    { "source": "/blog/(.*)", "destination": "/api/server?_route=blog/$1" },
+    { "source": "/sitemap.xml", "destination": "/api/server?_route=sitemap.xml" },
+    { "source": "/robots.txt", "destination": "/api/server?_route=robots.txt" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

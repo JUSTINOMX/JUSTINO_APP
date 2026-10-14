@@ -332,11 +332,11 @@ REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
   const hasMoonshot = Boolean(!moonshotAuthFailed && moonshotKey.length > 10 && !moonshotKey.includes('placeholder'));
   const hasGemini = Boolean(geminiKey.length > 5);
 
-  // Helper for fast Gemini generation (Priority 3 fallback)
+  // Helper for fast Gemini generation (Ultra-fast and stable in Vercel)
   const tryGemini = async () => {
     if (!hasGemini) return null;
     try {
-      console.log("[AI Provider] [3/3] Solicitando inferencia ultra-rápida a Gemini...");
+      console.log("[AI Provider] Solicitando inferencia ultra-rápida a Gemini...");
       const genAI = new GoogleGenAI({
         apiKey: geminiKey,
         httpOptions: {
@@ -371,8 +371,7 @@ REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
       // Valid models in accordance with @google/genai guidelines
       const modelsToTry = [
         "gemini-3.1-flash-lite",
-        "gemini-flash-latest",
-        "gemini-3.8-flash"
+        "gemini-flash-latest"
       ];
       
       for (const modelName of modelsToTry) {
@@ -382,8 +381,7 @@ REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
             contents: contents,
             config: {
               systemInstruction: effectiveSystemPrompt,
-              temperature: 0.25,
-              thinkingConfig: { thinkingBudget: 0 }
+              temperature: 0.25
             }
           });
           
@@ -414,13 +412,13 @@ REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
     return null;
   };
 
-  // 1. PRIORIDAD 1 (DEFAULT): DeepSeek
+  // 1. PRIORIDAD 1: DeepSeek (si está disponible y activo)
   if (hasDeepSeek) {
     try {
-      console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek (Default)...`);
+      console.log(`[AI Provider] [1/3] Solicitando inferencia a DeepSeek...`);
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -449,68 +447,58 @@ REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
         const errText = await response.text().catch(() => "");
         if (response.status === 401 || response.status === 403) {
           deepseekAuthFailed = true;
-          console.warn(`[AI Provider] Clave de DeepSeek no válida o expirada (HTTP ${response.status}). Pasando inmediatamente a Kimi / Moonshot...`);
+          console.warn(`[AI Provider] Clave de DeepSeek no válida (HTTP ${response.status}). Pasando a respaldo...`);
         } else {
-          console.warn(`[AI Provider] DeepSeek devolvió código HTTP ${response.status}: ${errText.substring(0, 100)}. Pasando a Kimi / Moonshot...`);
+          console.warn(`[AI Provider] DeepSeek código HTTP ${response.status}: ${errText.substring(0, 100)}`);
         }
       }
     } catch (error: any) {
-      console.warn(`[AI Provider] Error o timeout con DeepSeek (${error.message}). Pasando a Kimi / Moonshot...`);
+      console.warn(`[AI Provider] Timeout o error con DeepSeek (${error.message}). Continuando con respaldo...`);
     }
   }
 
-  // 2. PRIORIDAD 2 (RESPALDO): Kimi / Moonshot (compatible con api.moonshot.ai y api.moonshot.cn)
+  // 2. PRIORIDAD 2: Kimi / Moonshot (rápido y con detección inmediata de error)
   if (hasMoonshot) {
-    const endpointsToTry = [
-      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.7-code-highspeed", temp: 1 },
-      { url: "https://api.moonshot.ai/v1/chat/completions", model: "kimi-k2.6", temp: 1 },
-      { url: "https://api.moonshot.cn/v1/chat/completions", model: "moonshot-v1-8k", temp: 0.25 }
-    ];
+    try {
+      console.log(`[AI Provider] [2/3] Solicitando inferencia a Kimi / Moonshot...`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    for (const ep of endpointsToTry) {
-      try {
-        console.log(`[AI Provider] [2/3] Solicitando inferencia a Kimi (${ep.model})...`);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${moonshotKey}`
+        },
+        body: JSON.stringify({
+          model: "moonshot-v1-8k",
+          messages: secureMessages,
+          temperature: 0.25,
+          max_tokens: 3500
+        }),
+        signal: controller.signal
+      });
 
-        const response = await fetch(ep.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${moonshotKey}`
-          },
-          body: JSON.stringify({
-            model: ep.model,
-            messages: secureMessages,
-            temperature: ep.temp,
-            max_tokens: 3500
-          }),
-          signal: controller.signal
-        });
+      clearTimeout(timeoutId);
 
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const json = await response.json();
-          if (json?.choices?.[0]?.message?.content) {
-            console.log(`[AI Provider] Respuesta generada exitosamente con Kimi (${ep.model}).`);
-            return json;
-          }
-        } else {
-          const errText = await response.text().catch(() => "");
-          console.warn(`[AI Provider] Kimi (${ep.model}) código HTTP ${response.status}: ${errText.substring(0, 100)}`);
-          if (response.status === 401 && ep.url.includes('.cn')) {
-            moonshotAuthFailed = true;
-          }
+      if (response.ok) {
+        const json = await response.json();
+        if (json?.choices?.[0]?.message?.content) {
+          console.log(`[AI Provider] Respuesta generada exitosamente con Kimi.`);
+          return json;
         }
-      } catch (error: any) {
-        console.warn(`[AI Provider] Error o timeout con Kimi (${ep.model}): ${error.message}`);
+      } else {
+        moonshotAuthFailed = true;
+        console.warn(`[AI Provider] Moonshot devolvió status ${response.status}. Marcando inactivo.`);
       }
+    } catch (error: any) {
+      moonshotAuthFailed = true;
+      console.warn(`[AI Provider] Timeout o fallo en Moonshot (${error.message}). Pasando a Gemini...`);
     }
   }
 
-  // 3. PRIORIDAD 3 (RESPALDO ADICIONAL): Gemini
+  // 3. PRIORIDAD 3: Gemini (Respaldo robusto de alta velocidad)
   if (hasGemini) {
     const geminiResult = await tryGemini();
     if (geminiResult) return geminiResult;
