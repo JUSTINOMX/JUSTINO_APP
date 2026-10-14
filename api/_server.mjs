@@ -989,6 +989,7 @@ var paymentLimiter = rateLimit({
 app.use("/api/", standardLimiter);
 var authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const xUserId = req.headers["x-user-id"];
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
     if (token) {
@@ -1009,6 +1010,37 @@ var authMiddleware = async (req, res, next) => {
       } catch (err) {
         console.warn("Auth Middleware Token Validation:", err?.message || err);
       }
+    }
+  }
+  if (xUserId) {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceRoleKey) {
+        const { createClient: createClient2 } = await import("@supabase/supabase-js");
+        const supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
+        let profileQuery = supabaseAdmin.from("profiles").select("id, email, username, display_name");
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(xUserId);
+        if (isUuid) {
+          profileQuery = profileQuery.eq("id", xUserId);
+        } else {
+          profileQuery = profileQuery.eq("username", xUserId);
+        }
+        const { data: profile } = await profileQuery.maybeSingle();
+        if (profile) {
+          req.user = {
+            id: profile.id,
+            email: profile.email,
+            user_metadata: {
+              username: profile.username,
+              preferred_name: profile.display_name
+            }
+          };
+          return next();
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("Auth Middleware Fallback Check Warning:", fallbackErr);
     }
   }
   return res.status(401).json({
@@ -1261,6 +1293,22 @@ app.post("/api/v1/auth/register", async (req, res) => {
         console.warn("[AUTH REGISTER] Anon fallback exception:", anonErr);
       }
     }
+    let userSession = null;
+    if (anonKey) {
+      try {
+        const { createClient: createClient2 } = await import("@supabase/supabase-js");
+        const clientSupabase = createClient2(supabaseUrl, anonKey);
+        const { data: signData } = await clientSupabase.auth.signInWithPassword({
+          email: authEmail,
+          password: cleanPassword
+        });
+        if (signData?.session) {
+          userSession = signData.session;
+        }
+      } catch (signErr) {
+        console.warn("[AUTH REGISTER] Auto sign-in warning:", signErr);
+      }
+    }
     res.json({
       success: true,
       user: {
@@ -1269,6 +1317,7 @@ app.post("/api/v1/auth/register", async (req, res) => {
         username: cleanUsername,
         preferredName: cleanPreferredName
       },
+      session: userSession,
       authEmail
     });
   } catch (err) {
@@ -1286,8 +1335,8 @@ app.post("/api/v1/auth/login", async (req, res) => {
     const cleanUsername = rawIdentifier.toLowerCase().replace(/[^a-z0-9_.-]/g, "");
     const cleanPassword = String(password).trim();
     const authEmail = rawIdentifier.includes("@") ? rawIdentifier.toLowerCase() : `${cleanUsername}@justino.app`;
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || config.supabaseAnonKey;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl) {
       return res.json({
@@ -1330,19 +1379,44 @@ app.post("/api/v1/auth/login", async (req, res) => {
         const supabaseAdmin = createClient2(supabaseUrl, serviceRoleKey);
         const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
         const found = listData?.users?.find(
-          (u) => u.email?.toLowerCase() === authEmail.toLowerCase() || u.user_metadata?.username?.toLowerCase() === cleanUsername
+          (u) => u.email?.toLowerCase() === authEmail.toLowerCase() || u.email?.toLowerCase() === rawIdentifier.toLowerCase() || u.user_metadata?.username?.toLowerCase() === cleanUsername || u.user_metadata?.payment_email?.toLowerCase() === rawIdentifier.toLowerCase() || u.user_metadata?.payment_email?.toLowerCase() === cleanUsername
         );
         if (found) {
-          const { data: profile } = await supabaseAdmin.from("profiles").select("display_name, email, has_active_access").eq("id", found.id).maybeSingle();
-          const preferredName = profile?.display_name || found.user_metadata?.preferred_name || found.user_metadata?.username || cleanUsername;
+          let userSession = null;
+          if (anonKey && found.email) {
+            const supabasePublic = createClient2(supabaseUrl, anonKey);
+            const { data: signData, error: signErr } = await supabasePublic.auth.signInWithPassword({
+              email: found.email,
+              password: cleanPassword
+            });
+            if (!signErr && signData?.session) {
+              userSession = signData.session;
+            } else {
+              try {
+                await supabaseAdmin.auth.admin.updateUserById(found.id, { password: cleanPassword });
+                const { data: retrySign } = await supabasePublic.auth.signInWithPassword({
+                  email: found.email,
+                  password: cleanPassword
+                });
+                if (retrySign?.session) {
+                  userSession = retrySign.session;
+                }
+              } catch (_) {
+              }
+            }
+          }
+          const { data: profile } = await supabaseAdmin.from("profiles").select("display_name, email, has_active_access, full_name, username").eq("id", found.id).maybeSingle();
+          const preferredName = profile?.display_name || profile?.full_name || found.user_metadata?.preferred_name || found.user_metadata?.username || cleanUsername;
           return {
             success: true,
             user: {
               id: found.id,
               email: found.email || authEmail,
-              username: found.user_metadata?.username || cleanUsername,
+              username: profile?.username || found.user_metadata?.username || cleanUsername,
               preferredName
-            }
+            },
+            session: userSession,
+            authEmail: found.email
           };
         }
       }

@@ -47,7 +47,12 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (supabase) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) => 
+        setTimeout(() => resolve({ data: { session: null } }), 1500)
+      );
+      const res: any = await Promise.race([sessionPromise, timeoutPromise]);
+      const session = res?.data?.session;
       if (session?.access_token) {
         headers["Authorization"] = `Bearer ${session.access_token}`;
         headers["x-user-id"] = session.user.id;
@@ -56,6 +61,15 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
       console.warn("Could not retrieve Supabase session token:", e);
     }
   }
+
+  // Fallback to cached token in localStorage if getSession timed out or lock was congested
+  if (!headers["Authorization"] && typeof localStorage !== 'undefined') {
+    const cachedToken = localStorage.getItem('justino_access_token');
+    if (cachedToken) {
+      headers["Authorization"] = `Bearer ${cachedToken}`;
+    }
+  }
+
   const localUsername = typeof localStorage !== 'undefined' ? localStorage.getItem('justino_username') : null;
   if (localUsername && !headers["x-user-id"]) {
     headers["x-user-id"] = localUsername;

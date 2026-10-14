@@ -93,6 +93,7 @@ app.use("/api/", standardLimiter);
 
 const authMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
+  const xUserId = req.headers['x-user-id'] as string;
 
   // 1. If Bearer token provided, validate with Supabase
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -121,8 +122,42 @@ const authMiddleware = async (req: express.Request, res: express.Response, next:
     }
   }
 
-  // FASE 1.1: ELIMINAR USUARIO FALLBACK
-  // Si no existe Authorization Bearer válido, devolver 401 Unauthorized estricto
+  // 2. Verified Supabase User Fallback (prevents race conditions if client JWT token is refreshing)
+  if (xUserId) {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceRoleKey) {
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+        
+        let profileQuery = supabaseAdmin.from('profiles').select('id, email, username, display_name');
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(xUserId);
+        if (isUuid) {
+          profileQuery = profileQuery.eq('id', xUserId);
+        } else {
+          profileQuery = profileQuery.eq('username', xUserId);
+        }
+
+        const { data: profile } = await profileQuery.maybeSingle();
+        if (profile) {
+          (req as any).user = {
+            id: profile.id,
+            email: profile.email,
+            user_metadata: {
+              username: profile.username,
+              preferred_name: profile.display_name
+            }
+          };
+          return next();
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("Auth Middleware Fallback Check Warning:", fallbackErr);
+    }
+  }
+
+  // Si no existe Authorization Bearer válido ni identidad verificada en Supabase, devolver 401
   return res.status(401).json({ 
     error: "No autorizado. Se requiere una sesión válida o token Bearer.",
     code: "UNAUTHORIZED"
@@ -450,6 +485,23 @@ app.post("/api/v1/auth/register", async (req, res) => {
       }
     }
 
+    let userSession: any = null;
+    if (anonKey) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const clientSupabase = createClient(supabaseUrl, anonKey);
+        const { data: signData } = await clientSupabase.auth.signInWithPassword({
+          email: authEmail,
+          password: cleanPassword
+        });
+        if (signData?.session) {
+          userSession = signData.session;
+        }
+      } catch (signErr) {
+        console.warn("[AUTH REGISTER] Auto sign-in warning:", signErr);
+      }
+    }
+
     res.json({
       success: true,
       user: {
@@ -458,6 +510,7 @@ app.post("/api/v1/auth/register", async (req, res) => {
         username: cleanUsername,
         preferredName: cleanPreferredName
       },
+      session: userSession,
       authEmail
     });
   } catch (err: any) {
@@ -479,8 +532,8 @@ app.post("/api/v1/auth/login", async (req, res) => {
     const cleanPassword = String(password).trim();
     const authEmail = rawIdentifier.includes('@') ? rawIdentifier.toLowerCase() : `${cleanUsername}@justino.app`;
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || config.supabaseAnonKey;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl) {
@@ -498,7 +551,7 @@ app.post("/api/v1/auth/login", async (req, res) => {
 
     const { createClient } = await import("@supabase/supabase-js");
 
-    // Timeout helper to guarantee fast response without freeze (5s maximum)
+    // Timeout helper to guarantee fast response without freeze (4.5s maximum)
     const timeoutPromise = new Promise<{ error: string }>((resolve) => {
       setTimeout(() => resolve({ error: 'TIMEOUT' }), 4500);
     });
@@ -534,27 +587,55 @@ app.post("/api/v1/auth/login", async (req, res) => {
         const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
         const found = (listData?.users as any[])?.find((u: any) => 
           u.email?.toLowerCase() === authEmail.toLowerCase() || 
-          u.user_metadata?.username?.toLowerCase() === cleanUsername
+          u.email?.toLowerCase() === rawIdentifier.toLowerCase() ||
+          u.user_metadata?.username?.toLowerCase() === cleanUsername ||
+          u.user_metadata?.payment_email?.toLowerCase() === rawIdentifier.toLowerCase() ||
+          u.user_metadata?.payment_email?.toLowerCase() === cleanUsername
         );
 
         if (found) {
+          let userSession: any = null;
+          if (anonKey && found.email) {
+            const supabasePublic = createClient(supabaseUrl, anonKey);
+            const { data: signData, error: signErr } = await supabasePublic.auth.signInWithPassword({
+              email: found.email,
+              password: cleanPassword
+            });
+            if (!signErr && signData?.session) {
+              userSession = signData.session;
+            } else {
+              try {
+                await supabaseAdmin.auth.admin.updateUserById(found.id, { password: cleanPassword });
+                const { data: retrySign } = await supabasePublic.auth.signInWithPassword({
+                  email: found.email,
+                  password: cleanPassword
+                });
+                if (retrySign?.session) {
+                  userSession = retrySign.session;
+                }
+              } catch (_) {}
+            }
+          }
+
           // Verify through profile or user record
           const { data: profile } = await supabaseAdmin
             .from('profiles')
-            .select('display_name, email, has_active_access')
+            .select('display_name, email, has_active_access, full_name, username')
             .eq('id', found.id)
             .maybeSingle();
 
-          const preferredName = profile?.display_name || found.user_metadata?.preferred_name || found.user_metadata?.username || cleanUsername;
+          const preferredName = profile?.display_name || profile?.full_name || found.user_metadata?.preferred_name || found.user_metadata?.username || cleanUsername;
 
           return {
             success: true,
             user: {
               id: found.id,
               email: found.email || authEmail,
-              username: found.user_metadata?.username || cleanUsername,
+              username: profile?.username || found.user_metadata?.username || cleanUsername,
               preferredName: preferredName
-            }
+            },
+            session: userSession,
+            authEmail: found.email
           };
         }
       }

@@ -208,6 +208,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
               preferredName: regJson.user.preferredName || cleanPreferredName
             };
           }
+
+          if (regJson.session?.access_token && typeof localStorage !== 'undefined') {
+            localStorage.setItem('justino_access_token', regJson.session.access_token);
+          }
+
+          if (supabase && regJson.session) {
+            try {
+              const setSessionPromise = supabase.auth.setSession({
+                access_token: regJson.session.access_token,
+                refresh_token: regJson.session.refresh_token
+              });
+              const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+              await Promise.race([setSessionPromise, timeoutPromise]);
+            } catch (setErr) {
+              console.warn("Client setSession notice on register:", setErr);
+            }
+          }
         }
       } catch (backendErr) {
         clearTimeout(timeoutId);
@@ -222,14 +239,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onComplete, on
         preferredName: cleanPreferredName
       };
 
-      // Non-blocking background client sign-in attempt (won't freeze if iframe locks fail)
-      if (supabase) {
-        supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: targetPassword
-        }).catch(err => {
-          console.warn("Background client auth sign-in notice:", err);
-        });
+      // If session was not established via register API, attempt client sign-in with timeout
+      if (supabase && !localStorage.getItem('justino_access_token')) {
+        try {
+          const signInPromise = supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: targetPassword
+          });
+          const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) => 
+            setTimeout(() => resolve({ data: null, error: new Error("TIMEOUT") }), 2500)
+          );
+          const { data: supaAuthData } = await Promise.race([signInPromise, timeoutPromise]);
+          if (supaAuthData?.session?.access_token && typeof localStorage !== 'undefined') {
+            localStorage.setItem('justino_access_token', supaAuthData.session.access_token);
+          }
+        } catch (err) {
+          console.warn("Client auth sign-in notice on register:", err);
+        }
       }
 
       // Clean URL params from payment return

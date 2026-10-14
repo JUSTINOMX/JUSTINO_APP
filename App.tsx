@@ -42,6 +42,7 @@ function App() {
   const [vaultFiles, setVaultFiles] = useState<VaultFile[]>([]);
   const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
   const [caseStatus, setCaseStatus] = useState<CaseStatus>('analyzing');
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
 
   // The new high-converting landing page (LandingPageV2) is now the DEFAULT for root (/) and /lp.
   // The previous landing page remains preserved and accessible for traffic via /v1, /respaldo, /original, ?v=1, etc.
@@ -232,6 +233,8 @@ function App() {
         // Auto-provision profile and default case in Supabase
         await ensureUserProfileAndCase(session.user.id, session.user.email || '', preferredName);
 
+        setIsAuthInitializing(false);
+
         // Admin detection (Hint from session storage, but backend protects data)
         const isAdminSession = sessionStorage.getItem('justino_admin_active') === 'true';
         
@@ -241,14 +244,18 @@ function App() {
            setView('dashboard');
         }
       } else {
-        // ATOMIC CLEANUP on SIGNED_OUT or session invalidation
-        setUser(null);
-        setCurrentCaseId(null);
-        setCaseStatus('analyzing');
-        setMessages([createInitialWelcomeMessage()]);
-        setVaultFiles([]);
-        if (view !== 'landing' && view !== 'onboarding' && view !== 'admin-login') {
-          setView('landing');
+        setIsAuthInitializing(false);
+
+        // ATOMIC CLEANUP only on explicit SIGNED_OUT or invalidation
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setCurrentCaseId(null);
+          setCaseStatus('analyzing');
+          setMessages([createInitialWelcomeMessage()]);
+          setVaultFiles([]);
+          if (view !== 'landing' && view !== 'onboarding' && view !== 'admin-login') {
+            setView('landing');
+          }
         }
       }
     });
@@ -262,6 +269,9 @@ function App() {
   useEffect(() => {
     let isCurrent = true;
 
+    // FASE D: No ejecutar consultas de expedientes hasta completar resolución inicial de autenticación
+    if (isAuthInitializing) return;
+
     if (user && user.id && (view === 'dashboard' || view === 'admin-dashboard')) {
         const currentUserId = user.id;
 
@@ -269,7 +279,7 @@ function App() {
             if (!supabase || !isCurrent) return;
 
             try {
-                // 1. FASE 2 & FASE 5: Consultar legal_cases en Supabase como Fuente Única de Verdad
+                // 1. Consultar legal_cases en Supabase como Fuente Única de Verdad
                 let activeCaseId = currentCaseId;
                 const { data: casesData, error: caseError } = await supabase
                     .from('legal_cases')
@@ -278,7 +288,7 @@ function App() {
                     .order('updated_at', { ascending: false })
                     .limit(1);
 
-                if (!isCurrent) return;
+                if (!isCurrent || user?.id !== currentUserId) return;
 
                 if (casesData && !caseError && casesData.length > 0) {
                     const activeCase = casesData[0];
@@ -298,7 +308,7 @@ function App() {
                     .eq('user_id', currentUserId)
                     .order('created_at', { ascending: true });
                 
-                if (!isCurrent) return;
+                if (!isCurrent || user?.id !== currentUserId) return;
 
                 if (msgs && !msgError) {
                     if (msgs.length === 0) {
@@ -328,7 +338,7 @@ function App() {
 
                 const { data: files, error: fileError } = await filesQuery.order('created_at', { ascending: false });
 
-                if (!isCurrent) return;
+                if (!isCurrent || user?.id !== currentUserId) return;
 
                 if (files && !fileError && files.length > 0) {
                     const formattedFiles: VaultFile[] = files.map(f => {
@@ -376,7 +386,7 @@ function App() {
     return () => {
       isCurrent = false;
     };
-  }, [user?.id, view]);
+  }, [user?.id, view, isAuthInitializing]);
 
   const handleCaseClosed = async () => {
     if (currentCaseId && user?.id) {
@@ -458,7 +468,8 @@ function App() {
               key === 'justino_local_vault' ||
               key === 'justino_summary' ||
               key === 'justino_preferred_name' ||
-              key === 'justino_username'
+              key === 'justino_username' ||
+              key === 'justino_access_token'
             )
           ) {
             keysToRemove.push(key);

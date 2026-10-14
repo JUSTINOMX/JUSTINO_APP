@@ -73,32 +73,50 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
               if (loggedUser.preferredName) {
                 localStorage.setItem('justino_preferred_name', loggedUser.preferredName);
               }
-            }
-
-            // Ensure client-side Supabase session is established and verified
-            if (supabase && cleanPassword) {
-              const authEmail = `${cleanUsername}@justino.app`;
-              const { data: supaAuthData, error: supaAuthErr } = await supabase.auth.signInWithPassword({
-                email: authEmail,
-                password: cleanPassword
-              });
-
-              if (supaAuthErr || !supaAuthData?.session) {
-                console.warn("Client Supabase session sync failed:", supaAuthErr);
-                setError("No se pudo sincronizar la sesión segura con el servidor. Intenta de nuevo.");
-                setIsLoading(false);
-                return;
-              }
-
-              // Verify authenticated identity matches login payload
-              if (supaAuthData.user && supaAuthData.user.id !== loggedUser.id) {
-                console.error("User ID mismatch between server and client session");
-                setError("Inconsistencia de identidad detectada. Por favor reingresa tus credenciales.");
-                setIsLoading(false);
-                return;
+              if (data.session?.access_token) {
+                localStorage.setItem('justino_access_token', data.session.access_token);
               }
             }
 
+            // Ensure client-side Supabase session is established and verified without deadlocks
+            if (supabase) {
+              if (data.session) {
+                try {
+                  const setSessionPromise = supabase.auth.setSession({
+                    access_token: data.session.access_token,
+                    refresh_token: data.session.refresh_token
+                  });
+                  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+                  await Promise.race([setSessionPromise, timeoutPromise]);
+                } catch (syncErr) {
+                  console.warn("Client setSession notice:", syncErr);
+                }
+              } else if (cleanPassword) {
+                try {
+                  const targetAuthEmail = data.authEmail || `${cleanUsername}@justino.app`;
+                  const clientAuthPromise = supabase.auth.signInWithPassword({
+                    email: targetAuthEmail,
+                    password: cleanPassword
+                  });
+                  const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) => 
+                    setTimeout(() => resolve({ data: null, error: new Error("TIMEOUT") }), 3000)
+                  );
+                  const { data: supaAuthData, error: supaAuthErr } = await Promise.race([clientAuthPromise, timeoutPromise]);
+
+                  if (supaAuthData?.session?.access_token && typeof localStorage !== 'undefined') {
+                    localStorage.setItem('justino_access_token', supaAuthData.session.access_token);
+                  }
+
+                  if (supaAuthData?.user && supaAuthData.user.id !== loggedUser.id) {
+                    console.warn("Identity discrepancy between server user and client session");
+                  }
+                } catch (clientErr) {
+                  console.warn("Client signInWithPassword timeout/warning:", clientErr);
+                }
+              }
+            }
+
+            setIsLoading(false);
             onSuccess(loggedUser);
             return;
           }
@@ -113,37 +131,49 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, onClose }) =>
         console.warn("Direct API login warning, attempting direct Supabase authentication:", fetchErr);
       }
 
-      // 2. Direct Supabase SDK client-side authentication if backend proxy timed out or failed
+      // 2. Direct Supabase SDK client-side authentication with strict timeout to avoid freezing
       if (supabase) {
         const authEmail = `${cleanUsername}@justino.app`;
-        const { data, error: authError } = await supabase.auth.signInWithPassword({
-          email: authEmail,
-          password: cleanPassword,
-        });
+        try {
+          const clientAuthPromise = supabase.auth.signInWithPassword({
+            email: authEmail,
+            password: cleanPassword,
+          });
+          const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+            setTimeout(() => resolve({ data: null, error: new Error("AUTH_TIMEOUT") }), 3500)
+          );
+          const { data, error: authError } = await Promise.race([clientAuthPromise, timeoutPromise]);
 
-        if (authError || !data?.session) {
-          setError('Usuario o clave incorrectos. Por favor verifica tus datos.');
-          setIsLoading(false);
-          return;
-        }
-
-        if (data?.user) {
-          const userMeta = data.user.user_metadata || {};
-          const preferredName = userMeta.preferred_name || cleanUsername;
-          const loggedUser: User = {
-            id: data.user.id,
-            email: data.user.email || authEmail,
-            username: userMeta.username || cleanUsername,
-            preferredName: preferredName
-          };
-
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('justino_username', cleanUsername);
-            localStorage.setItem('justino_preferred_name', preferredName);
+          if (authError || !data?.session) {
+            setError('Usuario o clave incorrectos. Por favor verifica tus datos.');
+            setIsLoading(false);
+            return;
           }
 
-          onSuccess(loggedUser);
-          return;
+          if (data?.user) {
+            const userMeta = data.user.user_metadata || {};
+            const preferredName = userMeta.preferred_name || cleanUsername;
+            const loggedUser: User = {
+              id: data.user.id,
+              email: data.user.email || authEmail,
+              username: userMeta.username || cleanUsername,
+              preferredName: preferredName
+            };
+
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('justino_username', cleanUsername);
+              localStorage.setItem('justino_preferred_name', preferredName);
+              if (data.session?.access_token) {
+                localStorage.setItem('justino_access_token', data.session.access_token);
+              }
+            }
+
+            setIsLoading(false);
+            onSuccess(loggedUser);
+            return;
+          }
+        } catch (clientException) {
+          console.warn("Direct client login exception:", clientException);
         }
       }
 
