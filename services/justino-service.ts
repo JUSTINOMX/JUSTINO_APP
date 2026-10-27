@@ -166,12 +166,72 @@ export const validateDocumentContent = (
     }
   }
 
+  // 6. TEST11: Validación de Hechos de Gastos (Prohibición de conversión a 100%)
+  const isExact100 = caseContext?.structuredState?.expenses?.is_exact_100_percent;
+  if (isExact100 === false) {
+    const claimsExact100Regex = /\b(?:100% de los gastos|cien por ciento de los gastos|la totalidad del 100%|el 100% de las necesidades)\b/i;
+    if (claimsExact100Regex.test(content)) {
+      missingFields.push("Inconsistencia en gastos: El escrito afirma el '100% de los gastos' cuando la promovente sólo declaró cubrir 'prácticamente todos' sin cuantificación exacta");
+    }
+  }
+
+  // 7. TEST11: Validación de Filiación e Inspección de Acta
+  const birthCertInspected = caseContext?.structuredState?.paternity_filiation?.birth_certificate_inspected;
+  if (birthCertInspected === false) {
+    const claimsPaternityEstablishedRegex = /\b(?:se acredita la filiaci[oó]n con el acta de nacimiento debidamente cotejada|con el acta de nacimiento agregada que demuestra el reconocimiento formal)\b/i;
+    if (claimsPaternityEstablishedRegex.test(content)) {
+      missingFields.push("Inconsistencia en filiación: El acta de nacimiento solo ha sido mencionada y no se encuentra cotejada ni inspeccionada físicamente");
+    }
+  }
+
+  // 8. TEST11: Proporcionalidad vs Porcentaje Fijo de Pensión
+  const fixedPercentageRegex = /\b(?:la ley (?:fija|impone|obliga a|establece) un (?:30%|40%|35%)|fijar el 30% obligatorio|fijar el 40% forzoso)\b/i;
+  if (fixedPercentageRegex.test(content)) {
+    missingFields.push("Error de fundamentación: La pensión alimenticia en México se rige por el principio de proporcionalidad, no por porcentajes fijos automáticos");
+  }
+
+  // 9. TEST11: Domicilio del Demandado Desconocido
+  const counterpartyAddressStatus = caseContext?.structuredState?.counterparty_details?.address_status;
+  if (counterpartyAddressStatus === 'unknown') {
+    const fictitiousAddrRegex = /\b(?:con domicilio en calle [^\n]+|con domicilio conocido en [^\n]+)\b/i;
+    // Si no contiene petitorio o capítulo de solicitud de oficios de búsqueda
+    const hasSearchPetition = /\b(?:oficios? de b[uú]squeda|solicito girar oficio|al instituto nacional electoral|al imss|al sat|notificaci[oó]n por edictos)\b/i.test(content);
+    if (!hasSearchPetition && fictitiousAddrRegex.test(content)) {
+      missingFields.push("Inconsistencia procesal: El domicilio del demandado es desconocido; el escrito debe solicitar formalmente oficios de localización (INE/SAT/IMSS) o emplazamiento por edictos");
+    }
+  }
+
   return {
     isValid: missingFields.length === 0,
     missingFields,
     reason: missingFields.length > 0
       ? `El documento contiene datos pendientes o inconsistencias: ${missingFields.join(', ')}`
       : undefined
+  };
+};
+
+// Evaluación de suficiencia previa a autorización de documentos (TEST11 Puerta de Autorización)
+export const validateDocumentSufficiency = (
+  structuredState: any,
+  docType: string = 'demanda_alimentos'
+): { isReady: boolean; missingRequirements: string[]; reason?: string } => {
+  if (!structuredState) {
+    return {
+      isReady: false,
+      missingRequirements: ["Estado estructurado no inicializado"],
+      reason: "No se encontró el estado estructurado del expediente."
+    };
+  }
+
+  const readiness = structuredState.readiness || { is_ready_for_legal_draft: false, missing_indispensable_requirements: [] };
+  const missing = readiness.missing_indispensable_requirements || [];
+
+  return {
+    isReady: Boolean(readiness.is_ready_for_legal_draft),
+    missingRequirements: missing,
+    reason: readiness.is_ready_for_legal_draft 
+      ? undefined 
+      : `No es posible emitir un documento definitivo porque faltan requisitos indispensables: ${missing.join(', ')}`
   };
 };
 

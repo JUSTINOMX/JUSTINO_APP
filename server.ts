@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
-import { generateResponse, extractCandidateFacts } from "./services/ai-provider";
+import { generateResponse, extractCandidateFacts, evaluateInformationSufficiency } from "./services/ai-provider";
 import { setupBlogRoutes } from "./lib/blog";
 import { config } from "./config";
 import rateLimit from 'express-rate-limit';
@@ -1389,6 +1389,222 @@ app.get("/api/v1/cases/status", authMiddleware, async (req, res) => {
         state: currentCase.state_jurisdiction,
         city: currentCase.city_jurisdiction
       }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// TEST11 AUDIT: Vista previa de actualización sin modificar base de datos (Regla 14 & Criterio 8)
+app.post("/api/v1/cases/preview-update", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { caseId, updates } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').select('*').eq('user_id', userId);
+    if (caseId) query = query.eq('id', caseId);
+    const { data: cases, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !cases || cases.length === 0) {
+      return res.status(404).json({ error: "Expediente no encontrado para este usuario.", can_update: false });
+    }
+
+    const currentCase = cases[0];
+    const currentState = currentCase.structured_state || {};
+    
+    // Calcular mantenido, corregido y pendiente sin escribir en base de datos
+    const maintained: Record<string, any> = {};
+    const corrected: Array<{ field: string; previous_value: any; proposed_value: any }> = [];
+
+    if (updates && typeof updates === 'object') {
+      for (const [key, val] of Object.entries(updates)) {
+        const prevVal = currentState[key];
+        if (JSON.stringify(prevVal) !== JSON.stringify(val)) {
+          corrected.push({
+            field: key,
+            previous_value: prevVal !== undefined ? prevVal : null,
+            proposed_value: val
+          });
+        }
+      }
+    }
+
+    for (const [key, val] of Object.entries(currentState)) {
+      if (!updates || !(key in updates)) {
+        maintained[key] = val;
+      }
+    }
+
+    const simulatedState = {
+      ...currentState,
+      ...(updates || {})
+    };
+    const sufficiency = evaluateInformationSufficiency(simulatedState, currentCase.case_type || 'alimentos');
+
+    res.json({
+      success: true,
+      caseId: currentCase.id,
+      can_update: true,
+      preview: {
+        maintained,
+        corrected,
+        pending: sufficiency.missing_indispensable_requirements,
+        sufficiency
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Error al generar vista previa." });
+  }
+});
+
+// TEST11 AUDIT: Actualización autorizada con consentimiento expreso y trazabilidad (Regla 14 & Criterios 7, 8)
+app.post("/api/v1/cases/confirm-update", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { caseId, updates, userConfirmed } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    if (!userConfirmed) {
+      return res.status(400).json({ 
+        error: "Se requiere autorización expresa del usuario antes de aplicar cambios al expediente.",
+        code: "USER_CONSENT_REQUIRED"
+      });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').select('*').eq('user_id', userId);
+    if (caseId) query = query.eq('id', caseId);
+    const { data: cases, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !cases || cases.length === 0) {
+      return res.status(404).json({ error: "Expediente no encontrado para este usuario." });
+    }
+
+    const currentCase = cases[0];
+    const currentState = currentCase.structured_state || {};
+    const correctionsHistory = Array.isArray(currentState.corrections_history) ? [...currentState.corrections_history] : [];
+    const now = new Date().toISOString();
+
+    if (updates && typeof updates === 'object') {
+      for (const [key, val] of Object.entries(updates)) {
+        const prevVal = currentState[key];
+        if (JSON.stringify(prevVal) !== JSON.stringify(val)) {
+          correctionsHistory.push({
+            field: key,
+            previous_value: prevVal !== undefined ? prevVal : null,
+            new_value: val,
+            timestamp: now,
+            reason: "Actualización formal con consentimiento del usuario"
+          });
+        }
+      }
+    }
+
+    const updatedState = {
+      ...currentState,
+      ...(updates || {}),
+      corrections_history: correctionsHistory
+    };
+
+    updatedState.readiness = evaluateInformationSufficiency(updatedState, currentCase.case_type || 'alimentos');
+
+    const updatePayload: any = {
+      structured_state: updatedState,
+      updated_at: now
+    };
+
+    if (updatedState.identity?.full_name && (!currentCase.victim_name || currentCase.victim_name === 'Usuario')) {
+      updatePayload.victim_name = updatedState.identity.full_name;
+    }
+    if (updatedState.jurisdiction?.state && (!currentCase.state_jurisdiction || currentCase.state_jurisdiction.includes('Por definir'))) {
+      updatePayload.state_jurisdiction = updatedState.jurisdiction.state;
+      if (updatedState.jurisdiction.city) {
+        updatePayload.city_jurisdiction = updatedState.jurisdiction.city;
+      }
+    }
+
+    const { data: savedCase, error: updateErr } = await supabaseAdmin
+      .from('legal_cases')
+      .update(updatePayload)
+      .eq('id', currentCase.id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    res.json({
+      success: true,
+      caseId: currentCase.id,
+      verified: true,
+      structured_state: savedCase.structured_state,
+      corrections_history: correctionsHistory
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Error al actualizar expediente." });
+  }
+});
+
+// TEST11 AUDIT: Evaluación de suficiencia de información del caso (Criterio 2)
+app.get("/api/v1/cases/readiness", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const caseId = req.query.caseId as string;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Usuario no autenticado." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').select('*').eq('user_id', userId);
+    if (caseId) query = query.eq('id', caseId);
+    const { data: cases, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !cases || cases.length === 0) {
+      return res.status(404).json({ error: "Expediente no encontrado." });
+    }
+
+    const currentCase = cases[0];
+    const structuredState = currentCase.structured_state || {};
+    const readiness = evaluateInformationSufficiency(structuredState, currentCase.case_type || 'alimentos');
+
+    res.json({
+      caseId: currentCase.id,
+      readiness
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

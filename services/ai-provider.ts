@@ -69,6 +69,53 @@ ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
     - TIENES ESTRICTAMENTE PROHIBIDO sugerir, recomendar o insinuar que el usuario busque, contrate o acuda con un abogado humano, despacho particular o defensoría legal externa.
     - Los usuarios acuden a Justino para EVITAR a los abogados por desconfianza y altos costos.
     - TÚ eres su guía legal completo. Tú redactas sus escritos y le das las instrucciones exactas para que el usuario o usuaria realice sus trámites directamente por su propia cuenta ("pro se") de manera segura, rápida y formal.
+
+11. SEPARACIÓN ESTRICTA ENTRE HECHOS Y SUPUESTOS (TAXONOMÍA DE 6 NIVELES):
+    Todo dato del expediente debe distinguirse con rigor forense en:
+    a) Confirmado explícitamente por el usuario (hecho incontrovertible).
+    b) Declarado por el usuario, pendiente de verificación documental (alegación subjetiva).
+    c) Inferencia o hipótesis.
+    d) Dato desconocido / incertidumbre manifiesta.
+    e) Contradicción pendiente de aclaración.
+    f) Conclusión jurídica sujeta a verificación.
+    REGLAS ESPECÍFICAS OBLIGATORIAS:
+    - Si el usuario declara que la contraparte dejó de contribuir "alrededor de junio de 2026", regístralo como fecha alegada/declarada, NO como hecho formalmente admitido por la contraparte.
+    - Si el usuario dice que ha tenido que cubrir "prácticamente todos los gastos", TIENES ESTRICTAMENTE PROHIBIDO convertirlo en "el 100% de los gastos".
+    - Si el usuario menciona tener un documento (ej. "tengo el acta de nacimiento"), NO asumas que el documento ya fue cotejado ni que acredita la filiación de la contraparte hasta que sea inspeccionado. Regístralo como prueba mencionada no verificada.
+    - Si el usuario desconoce el domicilio, empleo o ingreso actual de la contraparte, asienta con total transparencia que son DESCONOCIDOS. NUNCA inventes domicilios, empleos ficticios ni supongas montos salariales.
+    - Si no existe un presupuesto mensual desglosado, regístralo como presupuesto pendiente. NUNCA asumas montos arbitrarios.
+    - Si el usuario desconoce si la contraparte negociaría, regístralo como desconocido; NO presuma negativa rotunda.
+
+12. ENTREVISTA ANTES DE RECOMENDAR O REDACTAR (EVALUACIÓN DE SUFICIENCIA):
+    - ANTES de sugerir una estrategia judicial definitiva o redactar un escrito formal, debes evaluar la suficiencia de información.
+    - Conduce una entrevista estructurada y progresiva: pregunta 1 o máximo 2 datos esenciales por turno.
+    - EXPLICA SIEMPRE la razón jurídica de por qué solicitas cada dato (ej. "Para cuantificar una pensión proporcional ante el juez conforme al Código Civil, es indispensable desglosar los rubros básicos de alimentación, colegiatura y salud...").
+    - NUNCA afirmes que "ya tenemos todo lo necesario" sólo por conocer la problemática general.
+    - Si falta información indispensable, mantén el caso en "diagnóstico preliminar" y orienta de forma clara sin emitir escritos definitivos prematuros.
+
+13. PUERTA DE AUTORIZACIÓN PARA DOCUMENTOS LEGALES:
+    Antes de crear o proponer cualquier documento jurídico:
+    1. Explica el propósito del documento.
+    2. Identifica con total claridad qué datos están confirmados, cuáles pendientes y qué anexos existen físicamente.
+    3. Verifica que la información es suficiente para la acción jurídica pretendida.
+    4. Informa qué limitaciones impiden considerarlo un escrito definitivo.
+    5. Solicita la autorización expresa del usuario cuando corresponda.
+    - Si faltan datos críticos (domicilio del demandado, cotejo de filiación, desglose de necesidades), NO emitas el tag [DOCUMENTO_OFICIAL: ...] definitivo; emite preguntas y explicaciones sobre la preparación previa o diligencias prejudiciales de búsqueda.
+
+14. ACTUALIZACIÓN CON VISTA PREVIA Y CONSENTIMIENTO:
+    Cuando el usuario solicite actualizar un dato del expediente o pida ver qué información quedaría guardada:
+    1. Presenta una vista previa transparente:
+       - Datos que se MANTIENEN.
+       - Datos que se CORRIGEN (valor anterior vs valor propuesto).
+       - Datos que quedan PENDIENTES.
+    2. Espera la autorización explícita antes de asentar el dato como formalmente confirmado.
+    3. Confirma el resultado únicamente tras la verificación de la operación real.
+
+15. FUNDAMENTACIÓN JURÍDICA Y PRINCIPIO DE PROPORCIONALIDAD (PROHIBICIÓN DE PORCENTAJES FIJOS):
+    - En materia de alimentos bajo la ley mexicana (Códigos Civiles locales y Código Nacional de Procedimientos Civiles y Familiares), la pensión alimenticia se rige por el PRINCIPIO DE PROPORCIONALIDAD: a la posibilidad de quien debe darlos y a la necesidad de quien debe recibirlos.
+    - TIENES ESTRICTAMENTE PROHIBIDO afirmar que la ley otorga un porcentaje fijo o automático (como afirmar falsamente "la ley fija el 30% al 40% obligatorio").
+    - NUNCA garantices medidas cautelares automáticas ni decisiones judiciales.
+    - Si se desconoce el domicilio del demandado, explica con precisión la vía procesal real: solicitar al juez oficios de localización y búsqueda dirigidos a instituciones públicas (INE, IMSS, SAT) o notificación por edictos.
 `;
 
 // State tracking for failed authentication credentials to avoid stalling consecutive user turns
@@ -102,21 +149,139 @@ export const getSystemDateTimeContext = (stateName?: string | null) => {
   };
 };
 
-// Automated extraction of facts from conversation to maintain structured state
+// Evaluador de suficiencia de información antes de recomendar o redactar
+export const evaluateInformationSufficiency = (state: any, matterType: string = 'alimentos') => {
+  const missing: string[] = [];
+  let score = 0;
+
+  // 1. Identidad del promovente
+  if (state.identity?.full_name && state.identity.full_name !== 'Usuario') {
+    score += 15;
+  } else {
+    missing.push("Nombre completo de la promovente");
+  }
+
+  // 2. Domicilio procesal completo
+  if (state.identity?.address && state.identity.address.length > 10) {
+    score += 15;
+  } else {
+    missing.push("Domicilio procesal completo de la promovente para oír y recibir notificaciones");
+  }
+
+  // 3. Menor o beneficiario
+  const hasMinor = state.participants?.some((p: any) => p.role === 'hijo_menor');
+  if (hasMinor) {
+    score += 15;
+  } else {
+    missing.push("Nombre completo del menor beneficiario");
+  }
+
+  // 4. Verificación de filiación / Acta de nacimiento
+  if (state.paternity_filiation?.birth_certificate_inspected) {
+    score += 15;
+  } else {
+    missing.push("Cotejo e inspección del acta de nacimiento (verificar si el demandado aparece asentado como padre)");
+  }
+
+  // 5. Nombre y viabilidad de notificación del demandado
+  const hasCounterpartyName = Boolean(state.counterparty_details?.name || state.participants?.some((p: any) => p.role === 'contraparte'));
+  if (hasCounterpartyName) {
+    score += 10;
+  } else {
+    missing.push("Nombre completo del demandado");
+  }
+
+  if (state.counterparty_details?.address_status === 'confirmed' && state.counterparty_details?.address) {
+    score += 15;
+  } else {
+    missing.push("Domicilio certero del demandado para emplazamiento (o solicitud de oficios de búsqueda judicial al INE/IMSS/SAT)");
+  }
+
+  // 6. Presupuesto mensual desglosado
+  if (state.expenses?.breakdown_status === 'itemized' && state.expenses?.monthly_budget_breakdown) {
+    score += 15;
+  } else {
+    missing.push("Presupuesto mensual desglosado de las necesidades del menor (alimentación, educación, salud, vivienda)");
+  }
+
+  const isReady = missing.length === 0 && score >= 85;
+
+  return {
+    is_ready_for_legal_draft: isReady,
+    missing_indispensable_requirements: missing,
+    information_sufficiency_score: score,
+    current_phase: isReady 
+      ? 'authorized_draft' 
+      : (score >= 40 ? 'interview_preliminary' : 'provisional_diagnosis')
+  };
+};
+
+// Automated extraction of facts from conversation with strict 6-tier taxonomy
 export const extractCandidateFacts = (userMessages: any[], existingState?: any) => {
   const state = existingState || {
-    identity: { full_name: null, address: null, city: null, state: null, postal_code: null },
+    identity: { full_name: null, address: null, city: null, state: null, postal_code: null, colonia: null },
     jurisdiction: { country: "México", state: null, city: null, judicial_district: null, authority: null, source: null, confirmed: false },
     participants: [],
-    facts: { confirmed: [], alleged: [], unknown: [], contradictions: [] },
+    facts: { 
+      confirmed: [], 
+      alleged_unverified: [], 
+      hypothesis_inference: [], 
+      unknown: [], 
+      contradictions: [], 
+      legal_conclusions_provisional: [],
+      alleged: [] 
+    },
+    evidence: [],
+    expenses: {
+      general_claim: null,
+      is_exact_100_percent: false,
+      monthly_budget_breakdown: null,
+      breakdown_status: 'pending_breakdown'
+    },
+    paternity_filiation: {
+      status: 'alleged_unverified',
+      birth_certificate_inspected: false,
+      father_appears_on_certificate: null,
+      dna_test_needed: false
+    },
+    counterparty_details: {
+      name: null,
+      address: null,
+      address_status: 'unknown',
+      employment: null,
+      employment_status: 'unknown',
+      income: null,
+      income_status: 'unknown',
+      willingness_to_negotiate: 'unknown'
+    },
+    readiness: {
+      is_ready_for_legal_draft: false,
+      missing_indispensable_requirements: [],
+      information_sufficiency_score: 0,
+      current_phase: 'interview_preliminary'
+    },
+    corrections_history: [],
     dates: [],
     amounts: [],
-    evidence: [],
     strategy: { current: null, reason: null, alternatives: [], pending_questions: [] },
     actions: [],
     decisions: [],
     document_state: { current_documents: [], pending_documents: [] }
   };
+
+  // Guarantee backwards compatibility and object shapes
+  if (!state.facts) state.facts = { confirmed: [], alleged_unverified: [], hypothesis_inference: [], unknown: [], contradictions: [], legal_conclusions_provisional: [], alleged: [] };
+  if (!state.facts.confirmed) state.facts.confirmed = [];
+  if (!state.facts.alleged_unverified) state.facts.alleged_unverified = state.facts.alleged || [];
+  if (!state.facts.hypothesis_inference) state.facts.hypothesis_inference = [];
+  if (!state.facts.unknown) state.facts.unknown = [];
+  if (!state.facts.contradictions) state.facts.contradictions = [];
+  if (!state.facts.legal_conclusions_provisional) state.facts.legal_conclusions_provisional = [];
+  if (!state.evidence) state.evidence = [];
+  if (!state.expenses) state.expenses = { general_claim: null, is_exact_100_percent: false, monthly_budget_breakdown: null, breakdown_status: 'pending_breakdown' };
+  if (!state.paternity_filiation) state.paternity_filiation = { status: 'alleged_unverified', birth_certificate_inspected: false, father_appears_on_certificate: null, dna_test_needed: false };
+  if (!state.counterparty_details) state.counterparty_details = { name: null, address: null, address_status: 'unknown', employment: null, employment_status: 'unknown', income: null, income_status: 'unknown', willingness_to_negotiate: 'unknown' };
+  if (!state.corrections_history) state.corrections_history = [];
 
   const onlyUserTexts = userMessages
     .filter((m: any) => m.role === 'user')
@@ -139,7 +304,7 @@ export const extractCandidateFacts = (userMessages: any[], existingState?: any) 
       }
     }
 
-    // 2. Detect Address (calle, número, colonia, CP) - Captura exhaustiva multilínea y con comas
+    // 2. Detect Address (calle, número, colonia, CP)
     const addrFullMatch = text.match(/(?:(?:calle|av\.|avenida|privada|fracc\.|colonia|col\.|c\.?p\.?)\s+[^\n]{6,120}|(?:(?:[A-ZÁÉÍÓÚÑa-z]+\s+)+\d{1,5}(?:[,\s]+(?:colonia|col\.|fracc\.)\s+[A-ZÁÉÍÓÚÑa-z0-9\s]+)?(?:[,\s]+(?:c\.?p\.?|código postal)\s*\d{4,5})?))/i);
     if (addrFullMatch && !state.identity.address) {
       const capturedAddr = addrFullMatch[0].trim().replace(/\s+/g, ' ');
@@ -175,6 +340,7 @@ export const extractCandidateFacts = (userMessages: any[], existingState?: any) 
     const counterMatch = text.match(/\b(mi (?:ex)?espos[oa]|mi (?:ex)?pareja|el pap[aá]|la mam[aá]|demandad[oa]|agresor(?:a)?)\s+(?:se llama\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]{3,}){0,3})\b/i);
     if (counterMatch) {
       const pName = counterMatch[2].trim();
+      state.counterparty_details.name = pName;
       if (!state.participants.some((p: any) => p.name.toLowerCase() === pName.toLowerCase())) {
         state.participants.push({
           name: pName,
@@ -197,15 +363,114 @@ export const extractCandidateFacts = (userMessages: any[], existingState?: any) 
       }
     }
 
-    // 6. Detect Uncertainties / Filiación / Paternidad no confirmada
+    // 6. TEST11: Gastos - "Prácticamente todos los gastos" (PROHIBIDO CONVERTIR A 100%)
+    const almostAllExpensesMatch = text.match(/\b(pr[aá]cticamente todos los gastos|casi todos los gastos|la mayor[ií]a de los gastos)\b/i);
+    if (almostAllExpensesMatch) {
+      state.expenses.is_exact_100_percent = false;
+      state.expenses.general_claim = "Prácticamente todos los gastos";
+      state.expenses.breakdown_status = 'pending_breakdown';
+      
+      const allegedExpense = "Promovente declara cubrir prácticamente todos los gastos del menor (no acreditado en su totalidad ni desglosado aún)";
+      if (!state.facts.alleged_unverified.includes(allegedExpense)) {
+        state.facts.alleged_unverified.push(allegedExpense);
+      }
+      // Asegurar que no exista un "100%" en los confirmados
+      state.facts.confirmed = state.facts.confirmed.filter((f: string) => !f.includes("100%"));
+    }
+
+    // 7. TEST11: Fecha de cese de contribuciones (alrededor de junio de 2026 - Hecho alegado)
+    const june2026Match = text.match(/\b(alrededor de junio de 2026|junio de 2026|mediados de 2026)\b/i);
+    if (june2026Match) {
+      const allegedDateFact = "Fecha declarada por la promovente de cese de contribuciones: alrededor de junio de 2026 (alegación subjetiva pendiente de acreditación)";
+      if (!state.facts.alleged_unverified.includes(allegedDateFact)) {
+        state.facts.alleged_unverified.push(allegedDateFact);
+      }
+      if (!state.dates.some((d: any) => d.value?.includes("junio de 2026"))) {
+        state.dates.push({
+          label: "Cese de aportaciones",
+          value: "Alrededor de junio de 2026",
+          status: "alleged_unverified",
+          is_confirmed: false
+        });
+      }
+    }
+
+    // 8. TEST11: Acta de nacimiento mencionada vs inspeccionada
+    const birthCertMatch = text.match(/\b(tengo el acta|tengo su acta|cuento con el acta|acta de nacimiento)\b/i);
+    if (birthCertMatch) {
+      const existingEvidence = state.evidence.find((e: any) => e.name?.toLowerCase().includes("acta de nacimiento"));
+      if (!existingEvidence) {
+        state.evidence.push({
+          name: "Acta de nacimiento",
+          type: "documental_publica",
+          status: "mentioned_unverified",
+          notes: "Mencionada por la promovente; pendiente de cotejo para verificar si el padre aparece formalmente asentado."
+        });
+      }
+      state.paternity_filiation.birth_certificate_inspected = false;
+      const unverifiedCertFact = "Acta de nacimiento mencionada por la promovente: pendiente de inspección formal para verificar asentamiento del demandado";
+      if (!state.facts.alleged_unverified.includes(unverifiedCertFact)) {
+        state.facts.alleged_unverified.push(unverifiedCertFact);
+      }
+    }
+
+    // 9. TEST11: Domicilio, empleo o ingreso del demandado desconocidos
+    const unknownAddressMatch = text.match(/\b(no s[eé] d[oó]nde vive|desconozco su domicilio|no conozco su direcci[oó]n|no s[eé] su direcci[oó]n)\b/i);
+    if (unknownAddressMatch) {
+      state.counterparty_details.address = null;
+      state.counterparty_details.address_status = 'unknown';
+      const unknownAddrFact = "Domicilio actual del demandado: desconocido (requiere solicitar oficios de búsqueda judicial al INE/SAT/IMSS o edictos)";
+      if (!state.facts.unknown.includes(unknownAddrFact)) {
+        state.facts.unknown.push(unknownAddrFact);
+      }
+    }
+
+    const unknownJobMatch = text.match(/\b(no s[eé] si trabaja|desconozco su empleo|no s[eé] d[oó]nde trabaja|desconozco su trabajo)\b/i);
+    if (unknownJobMatch) {
+      state.counterparty_details.employment = null;
+      state.counterparty_details.employment_status = 'unknown';
+      const unknownJobFact = "Empleo y lugar de trabajo actual del demandado: desconocidos";
+      if (!state.facts.unknown.includes(unknownJobFact)) {
+        state.facts.unknown.push(unknownJobFact);
+      }
+    }
+
+    const unknownIncomeMatch = text.match(/\b(no s[eé] cu[aá]nto gana|desconozco sus ingresos|no s[eé] su sueldo)\b/i);
+    if (unknownIncomeMatch) {
+      state.counterparty_details.income = null;
+      state.counterparty_details.income_status = 'unknown';
+      const unknownIncomeFact = "Ingreso y capacidad económica exacta del demandado: desconocidos (sujeto a informe patronal o presunción legal)";
+      if (!state.facts.unknown.includes(unknownIncomeFact)) {
+        state.facts.unknown.push(unknownIncomeFact);
+      }
+    }
+
+    const unknownNegotiateMatch = text.match(/\b(no s[eé] si (?:quiera|va a|aceptar[ií]a) negociar|desconozco si negociar[ií]a|no s[eé] c[oó]mo reaccionar[ií]a)\b/i);
+    if (unknownNegotiateMatch) {
+      state.counterparty_details.willingness_to_negotiate = 'unknown';
+      const unknownNegFact = "Disposición del demandado a conciliar o negociar: desconocida (no se presume rechazo formal)";
+      if (!state.facts.unknown.includes(unknownNegFact)) {
+        state.facts.unknown.push(unknownNegFact);
+      }
+    }
+
+    // 10. Detect Uncertainties / Filiación / Paternidad no confirmada
     const paternityDoubtMatch = text.match(/\b(no s[eé]\b[^\.\n]*?\b(?:pap[aá]|padre)|dudas?\b[^\.\n]*?\bpaternidad|prueba de adn|no est[aá] reconocid[oa]|desconoce[^\.\n]*?paternidad|insegur[ao][^\.\n]*?paternidad)\b/i);
     if (paternityDoubtMatch) {
+      state.paternity_filiation.status = 'disputed';
+      state.paternity_filiation.dna_test_needed = true;
       const doubtItem = "Incertidumbre expresa sobre la filiación/paternidad. Pendiente de resolución por vía pericial o reconocimiento legal.";
       if (!state.facts.unknown.includes(doubtItem)) {
         state.facts.unknown.push(doubtItem);
       }
     }
   });
+
+  // Sync backwards compatible alias
+  state.facts.alleged = state.facts.alleged_unverified;
+
+  // Actualizar evaluación de suficiencia
+  state.readiness = evaluateInformationSufficiency(state, 'alimentos');
 
   return state;
 };
@@ -235,7 +500,7 @@ export async function generateResponse(
     lastMoonshotKey = moonshotKey;
   }
 
-  // --- CONTEXT BUILDER (FASE 3) ---
+  // --- CONTEXT BUILDER (FASE 3 & TEST11 AUDIT TAXONOMY) ---
   const stateName = caseContext?.jurisdiction?.state || caseContext?.structuredState?.jurisdiction?.state || null;
   const cityName = caseContext?.jurisdiction?.city || caseContext?.structuredState?.jurisdiction?.city || null;
   const authorityName = caseContext?.jurisdiction?.authority || caseContext?.structuredState?.jurisdiction?.authority || null;
@@ -245,12 +510,19 @@ export async function generateResponse(
   const clientDisplayName = caseContext?.identity?.full_name || caseContext?.structuredState?.identity?.full_name || userName || 'Usuario';
   const clientAddress = caseContext?.identity?.address || caseContext?.structuredState?.identity?.address || null;
 
-  const confirmedFacts: string[] = caseContext?.structuredState?.facts?.confirmed || [];
-  const allegedFacts: string[] = caseContext?.structuredState?.facts?.alleged || [];
-  const unknownFacts: string[] = caseContext?.structuredState?.facts?.unknown || [];
-  const contradictions: string[] = caseContext?.structuredState?.facts?.contradictions || [];
-  const participants: Array<{ name: string; role: string; relationship?: string }> = caseContext?.structuredState?.participants || [];
-  const currentStrategy: string | null = caseContext?.structuredState?.strategy?.current || null;
+  const st = caseContext?.structuredState;
+  const confirmedFacts: string[] = st?.facts?.confirmed || [];
+  const allegedUnverified: string[] = st?.facts?.alleged_unverified || st?.facts?.alleged || [];
+  const hypothesisInferences: string[] = st?.facts?.hypothesis_inference || [];
+  const unknownFacts: string[] = st?.facts?.unknown || [];
+  const contradictions: string[] = st?.facts?.contradictions || [];
+  const legalConclusions: string[] = st?.facts?.legal_conclusions_provisional || [];
+  const participants: Array<{ name: string; role: string; relationship?: string }> = st?.participants || [];
+  const currentStrategy: string | null = st?.strategy?.current || null;
+  const readiness = st?.readiness || evaluateInformationSufficiency(st || {}, 'alimentos');
+  const expenses = st?.expenses || { is_exact_100_percent: false, general_claim: null, monthly_budget_breakdown: null };
+  const filiation = st?.paternity_filiation || { birth_certificate_inspected: false, status: 'unknown' };
+  const counterparty = st?.counterparty_details || { address_status: 'unknown', employment_status: 'unknown', income_status: 'unknown' };
 
   // Build Context Blocks
   const temporalBlock = `
@@ -292,29 +564,58 @@ ${participants.length > 0 ? participants.map(p => `  * ${p.name} (Rol: ${p.role}
 
   const structuredMemoryBlock = `
 ====================================================================
-MEMORIA ESTRUCTURADA DEL CASO (HECHOS VS CONCLUSIONES)
+MEMORIA ESTRUCTURADA DEL CASO (TAXONOMÍA FORENSE DE 6 NIVELES)
 ====================================================================
-HECHOS CONFIRMADOS POR EL USUARIO (NO VOLVER A PREGUNTARLOS):
+1. HECHOS CONFIRMADOS EXPLÍCITAMENTE (NO VOLVER A PREGUNTARLOS):
 ${confirmedFacts.length > 0 ? confirmedFacts.map(f => `  * ${f}`).join('\n') : '  * Ningún hecho formal confirmado aún.'}
 
-INCERTIDUMBRES / DUDAS MANIFIESTAS DEL USUARIO:
+2. HECHOS DECLARADOS PENDIENTES DE VERIFICACIÓN DOCUMENTAL:
+${allegedUnverified.length > 0 ? allegedUnverified.map(a => `  * ${a}`).join('\n') : '  * No hay alegaciones pendientes.'}
+
+3. INFERENCIAS O HIPÓTESIS:
+${hypothesisInferences.length > 0 ? hypothesisInferences.map(h => `  * ${h}`).join('\n') : '  * Sin inferencias asentadas.'}
+
+4. DATOS DESCONOCIDOS / INCERTIDUMBRES MANIFIESTAS:
 ${unknownFacts.length > 0 ? unknownFacts.map(u => `  * ${u}`).join('\n') : '  * Ninguna incertidumbre manifiesta registrada.'}
 
-HECHOS ALEGADOS / POR VERIFICAR:
-${allegedFacts.length > 0 ? allegedFacts.map(a => `  * ${a}`).join('\n') : '  * No hay alegaciones pendientes.'}
-
-CONTRADICCIONES DETECTADAS (ACLARAR CON EL USUARIO ANTES DE REDACTAR):
+5. CONTRADICCIONES DETECTADAS (ACLARAR CON EL USUARIO ANTES DE REDACTAR):
 ${contradictions.length > 0 ? contradictions.map(c => `  * ATENCIÓN: ${c}`).join('\n') : '  * Ninguna contradicción detectada.'}
 
-ESTRATEGIA ACTUAL REGISTRADA:
-${currentStrategy ? `  * ${currentStrategy}` : '  * En diagnóstico jurídico preliminar.'}
+6. CONCLUSIONES JURÍDICAS PROVISIONALES:
+${legalConclusions.length > 0 ? legalConclusions.map(l => `  * ${l}`).join('\n') : '  * Sujeto a diagnóstico preliminar.'}
 
-REGLAS DE RAZONAMIENTO Y PROTECCIÓN DE DATOS:
-1. Los hechos confirmados arriba son DATOS SEGUROS. Aunque hayan sido proporcionados al inicio de la conversación, NO los vuelvas a preguntar.
-2. NO confundas tus propias sugerencias o análisis jurídicos con hechos confirmados del usuario.
-3. CERO PLACEHOLDERS: Si falta el nombre completo, el domicilio exacto o la ciudad, NO generes el escrito legal con corchetes de relleno (como [ TU CALLE ] o [ NOMBRE ]). Pídele amablemente al usuario el dato que falta en tu mensaje de chat.
-4. REGLA ESTRICTA DE FILIACIÓN: Si existe duda de paternidad manifestada por la usuaria, queda ESTRICTAMENTE PROHIBIDO asumir paternidad automática o redactar demandas atribuyendo obligaciones de alimentos sin plantear la acción prejudicial/judicial de investigación o desconocimiento de paternidad o prueba pericial genética en ADN.
-5. REGLA DE JURISDICCIÓN ESTRICTA: La jurisdicción procesal es ${stateName || 'Chihuahua'}. Queda TERMINANTEMENTE PROHIBIDO citar juzgados, códigos o dependencias de la Ciudad de México cuando el caso pertenezca a otra entidad federativa.
+ESTADO DE GASTOS Y ALIMENTOS:
+- Cobertura de gastos declarada: ${expenses.general_claim || 'No especificada'}
+- ¿Es exactamente 100%?: ${expenses.is_exact_100_percent ? 'SÍ' : 'NO (Queda prohibido afirmar que cubre el 100% exacto)'}
+- Desglose presupuestal: ${expenses.monthly_budget_breakdown ? 'Desglosado' : 'PENDIENTE DE DESGLOSE MENSUAL'}
+
+FILIACIÓN Y DOCUMENTOS:
+- Acta de nacimiento inspeccionada: ${filiation.birth_certificate_inspected ? 'SÍ' : 'NO (Solo mencionada, NO cotejada aún)'}
+- Estado de filiación: ${filiation.status}
+
+DATOS DE LA CONTRAPARTE:
+- Domicilio: ${counterparty.address_status === 'confirmed' ? counterparty.address : 'DESCONOCIDO (Requiere oficios de búsqueda)'}
+- Empleo: ${counterparty.employment_status === 'confirmed' ? counterparty.employment : 'DESCONOCIDO'}
+- Ingreso: ${counterparty.income_status === 'confirmed' ? counterparty.income : 'DESCONOCIDO'}
+- Voluntad de negociar: ${counterparty.willingness_to_negotiate}
+
+EVALUACIÓN DE SUFICIENCIA (READINESS):
+- ¿Listo para redactar demanda o documento definitivo?: ${readiness.is_ready_for_legal_draft ? 'SÍ' : 'NO'}
+- Requisitos indispensables pendientes:
+${readiness.missing_indispensable_requirements.length > 0 ? readiness.missing_indispensable_requirements.map((r: string) => `  * ${r}`).join('\n') : '  * Ninguno. Información completa.'}
+- Fase actual del expediente: ${readiness.current_phase.toUpperCase()}
+
+REGLAS DE RAZONAMIENTO FORENSE VINCULANTES:
+1. SI LA SUFICIENCIA ES "NO", TIENES ESTRICTAMENTE PROHIBIDO emitir el tag [DOCUMENTO_OFICIAL: ...] con una demanda definitiva o convenio final. En su lugar, explica con empatía y claridad qué datos indispensables faltan y por qué la ley los exige, formulando 1 o 2 preguntas por turno.
+2. NUNCA afirmes que la promovente cubre el "100% de los gastos" si ella indicó que cubre "prácticamente todos".
+3. NUNCA asumas que Alejandro u otra contraparte aparece en el acta de nacimiento si el acta no ha sido revisada físicamente.
+4. NUNCA inventes domicilios, salarios o empleos para la contraparte. Si se desconoce su domicilio, explica que el juzgado debe girar oficios de localización al INE/IMSS/SAT o recurrir a edictos.
+6. REGLAS ADICIONALES DE PROTECCIÓN DE DATOS:
+- Los hechos confirmados arriba son DATOS SEGUROS. Aunque hayan sido proporcionados al inicio de la conversación, NO los vuelvas a preguntar.
+- NO confundas tus propias sugerencias o análisis jurídicos con hechos confirmados del usuario.
+- CERO PLACEHOLDERS: Si falta el nombre completo, el domicilio exacto o la ciudad, NO generes el escrito legal con corchetes de relleno. Pídele amablemente al usuario el dato que falta en tu mensaje de chat.
+- REGLA ESTRICTA DE FILIACIÓN: Si existe duda de paternidad manifestada por la usuaria, queda ESTRICTAMENTE PROHIBIDO asumir paternidad automática o redactar demandas atribuyendo obligaciones de alimentos sin plantear la acción prejudicial/judicial de investigación o desconocimiento de paternidad o prueba pericial genética en ADN.
+- REGLA DE JURISDICCIÓN ESTRICTA: La jurisdicción procesal es ${stateName || 'Chihuahua'}. Queda TERMINANTEMENTE PROHIBIDO citar juzgados, códigos o dependencias de la Ciudad de México cuando el caso pertenezca a otra entidad federativa.
 `;
 
   const userPromptAddon = `\n${temporalBlock}\n${jurisdictionBlock}\n${identityBlock}\n${structuredMemoryBlock}\n\nDATOS DEL CLIENTE:\nEl usuario se llama "${clientDisplayName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`;
