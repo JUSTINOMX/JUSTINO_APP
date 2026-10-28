@@ -163,6 +163,238 @@ export interface CaseStructuredState {
     current_documents: string[];
     pending_documents: string[];
   };
+  // MOTOR DE INVESTIGACIÓN JURÍDICA PROGRESIVA Y CONOCIMIENTO ACUMULATIVO
+  matter_classification?: CaseMatterClassification;
+  legal_pathways?: LegalPathway[];
+  requirements_map?: RequirementItem[];
+  contradictions_detected?: CaseContradiction[];
+  legal_research_log?: LegalResearchRecord[];
+  active_inquiry?: {
+    next_question?: string;
+    legal_reason?: string;
+    priority?: string;
+    target_requirement_id?: string;
+  };
+  // MÓDULO: MEMORIA VIVA Y EXPEDIENTE MAESTRO PERSISTENTE
+  facts_registry?: MasterFactItem[];
+  master_markdown?: MasterMarkdownState;
+  master_markdown_version?: number;
+}
+
+// ESTADOS DE VERIFICACIÓN DE HECHOS (MÓDULO MEMORIA VIVA - SECCIÓN 4)
+export type FactVerificationStatus =
+  | 'DECLARADO_POR_USUARIO'
+  | 'DECLARADO_POR_TERCERO'
+  | 'EXTRAIDO_DE_DOCUMENTO'
+  | 'VERIFICADO_DOCUMENTALMENTE'
+  | 'VERIFICADO_CON_FUENTE_EXTERNA'
+  | 'INFERIDO_PROVISIONAL'
+  | 'DESCONOCIDO'
+  | 'CONTRADICTORIO'
+  | 'CORREGIDO_CON_HISTORIAL';
+
+export interface MasterFactItem {
+  id: string; // e.g. fact_001
+  statement: string;
+  category: 'identity' | 'relationship' | 'chronology' | 'expenses_amounts' | 'domicile' | 'paternity' | 'procedure' | 'general';
+  source: {
+    type: 'user_declaration' | 'third_party' | 'document' | 'external_source' | 'model_inference';
+    reference: string;
+    timestamp: string;
+  };
+  verification_status: FactVerificationStatus;
+  notes?: string;
+  superseded_by?: string;
+  correction_history?: Array<{
+    previous_statement: string;
+    timestamp: string;
+    reason: string;
+    source: string;
+  }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MasterMemoryUpdateLogEntry {
+  version: number;
+  timestamp: string;
+  change_type:
+    | 'initial_creation'
+    | 'fact_added'
+    | 'fact_corrected'
+    | 'contradiction_detected'
+    | 'contradiction_resolved'
+    | 'document_updated'
+    | 'strategy_shifted'
+    | 'no_op_conserved';
+  summary: string;
+  affected_fields: string[];
+}
+
+export interface MasterMarkdownState {
+  case_id: string;
+  user_id: string;
+  version: number;
+  markdown_content: string;
+  content_hash: string;
+  last_updated_at: string;
+  update_log: MasterMemoryUpdateLogEntry[];
+}
+
+// 11 ESTADOS PERMITIDOS DEL MAPA DINÁMICO DE REQUISITOS (FASE C)
+export type RequirementStatus =
+  | 'DESCONOCIDO'
+  | 'PREGUNTA_PENDIENTE'
+  | 'DECLARADO_POR_USUARIO'
+  | 'DOCUMENTO_PENDIENTE'
+  | 'DOCUMENTO_RECIBIDO_NO_REVISADO'
+  | 'VERIFICADO_DOCUMENTALMENTE'
+  | 'VERIFICADO_CON_FUENTE_EXTERNA'
+  | 'CONTRADICTORIO'
+  | 'NO_APLICA_JUSTIFICADO'
+  | 'NO_VERIFICABLE'
+  | 'RESUELTO_CON_LIMITACIONES';
+
+export type RequirementImportance = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
+
+export interface RequirementItem {
+  id: string;
+  description: string;
+  legal_reason: string;
+  pathway_ids: string[];
+  status: RequirementStatus;
+  source: string;
+  importance: RequirementImportance;
+  consequence_if_unresolved: string;
+  investigation_prompt: string;
+  dependencies: string[];
+  resolution_note?: string;
+  updated_at?: string;
+}
+
+export interface LegalPathway {
+  id: string;
+  name: string;
+  type: 'judicial' | 'extrajudicial' | 'prejudicial';
+  description: string;
+  pros: string[];
+  cons: string[];
+  risks: string[];
+  estimated_timeline: string;
+  status: 'viable' | 'preferente' | 'descartada' | 'en_evaluacion';
+  required_documents: string[];
+  competent_authority: string;
+  requisites_summary?: string;
+}
+
+export type ContradictionSeverity = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
+export type ContradictionCategory =
+  | 'identity_relations'
+  | 'dates_chronology'
+  | 'facts_versions'
+  | 'quantities_math'
+  | 'locations_jurisdiction'
+  | 'documentary';
+
+export interface CaseContradiction {
+  id: string;
+  category: ContradictionCategory;
+  description: string;
+  versions: Array<{
+    text: string;
+    source: string;
+    timestamp?: string;
+  }>;
+  severity: ContradictionSeverity;
+  status: 'DETECTADA' | 'EN_ACLARACION' | 'RESUELTA_JUSTIFICADA' | 'NO_RESUELTA_LIMITANTE';
+  question_to_clarify: string;
+  resolution?: string;
+  affects_pathways: string[];
+  detected_at?: string;
+}
+
+export interface LegalResearchRecord {
+  id: string;
+  question_investigated: string;
+  source_name: string;
+  url?: string;
+  authority: string;
+  consultation_date: string;
+  publication_date?: string;
+  jurisdiction: string;
+  norm_citation: string;
+  conclusion: string;
+  limitations_pending: string[];
+  validity_confirmed: boolean;
+}
+
+export interface CaseMatterClassification {
+  primary_matter: 'familiar' | 'arrendamiento' | 'penal' | 'laboral' | 'mercantil' | 'civil_general' | 'administrativo';
+  detected_areas: string[];
+  confidence: number;
+  user_objective: string;
+  current_situation: string;
+  is_provisional: boolean;
+}
+
+export interface DocumentCandidateMatrix {
+  doc_type: string;
+  objective: string;
+  recipient_authority: string;
+  standing_and_capacity: string;
+  essential_facts_required: string[];
+  identities_relationships_to_prove: string[];
+  dates_and_amounts: string[];
+  legal_grounds: string[];
+  petitions: string[];
+  available_evidence: string[];
+  required_annexes: string[];
+  formal_requirements: string[];
+  missing_data: string[];
+  risks_if_incomplete: string[];
+  is_ready_for_drafting: boolean;
+}
+
+// 4 CLASES DE LA BASE DE CONOCIMIENTO ACUMULATIVA (SECCIÓN 12)
+export interface KnowledgeClassA_ExternalNorm {
+  id: string;
+  jurisdiction: string;
+  norm_name: string;
+  article: string;
+  official_source: string;
+  url?: string;
+  validity_status: 'vigente' | 'derogado' | 'reforma_pendiente' | 'por_verificar';
+  consultation_date: string;
+  version: string;
+}
+
+export interface KnowledgeClassB_InvestigationPattern {
+  id: string;
+  matter: string;
+  pattern_name: string;
+  typical_requirements: string[];
+  common_contradictions: string[];
+  strategy_divergence_triggers: string[];
+  supporting_evidence_types: string[];
+  status: 'propuesto' | 'probado' | 'validado' | 'obsoleto' | 'pendiente_revision';
+}
+
+export interface KnowledgeClassC_OperationalPattern {
+  id: string;
+  document_type: string;
+  checklist_items: string[];
+  essential_clauses: string[];
+  forensic_validations: string[];
+  known_regression_risks: string[];
+  status: 'propuesto' | 'probado' | 'validado' | 'obsoleto' | 'pendiente_revision';
+}
+
+export interface KnowledgeClassD_CaseParticular {
+  case_id: string;
+  user_id: string; // AISLADO ESTRICTAMENTE AL EXPEDIENTE Y PROPIETARIO
+  facts: string[];
+  documents: string[];
+  isolated_at: string;
 }
 
 export interface CaseSummary {

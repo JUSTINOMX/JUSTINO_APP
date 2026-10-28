@@ -2,6 +2,16 @@ import express from "express";
 import path from "path";
 import cors from "cors";
 import { generateResponse, extractCandidateFacts, evaluateInformationSufficiency } from "./services/ai-provider";
+import { resolveContradictionProtocol } from "./services/contradiction-engine";
+import { evaluateComprehensiveSufficiency } from "./services/sufficiency-engine";
+import { knowledgeBase } from "./services/knowledge-base";
+import {
+  evaluateIncrementalUpdate,
+  persistMasterMemory,
+  generateMasterMarkdown,
+  reconstructMarkdownFromState,
+  computeContentHash
+} from "./services/master-memory-service";
 import { setupBlogRoutes } from "./lib/blog";
 import { config } from "./config";
 import rateLimit from 'express-rate-limit';
@@ -1170,46 +1180,67 @@ const chatHandler = async (req: express.Request, res: express.Response) => {
 
     const updatedStructuredState = extractCandidateFacts(userMessages, existingStructuredState);
 
-    // Context for LLM (Context Builder FASE 3)
+    const memoryMeta = {
+      caseId: currentCase?.id || 'transient-case',
+      userId: authenticatedUser.id,
+      title: currentCase?.title || 'Expediente Jurídico',
+      userRole: authenticatedUser.role
+    };
+
+    // Actualización incremental controlada de la memoria viva del caso (Secciones 2, 3, 7)
+    const memoryResult = evaluateIncrementalUpdate(
+      updatedStructuredState,
+      userMessages,
+      memoryMeta
+    );
+
+    const finalStructuredState = memoryResult.updatedState;
+    const masterMarkdown = memoryResult.markdownContent;
+
+    // Context for LLM (Context Builder FASE 3 y Memoria Viva)
     const caseContext = {
       caseId: currentCase?.id,
       status: currentCase?.status || 'active',
       jurisdiction: {
-        state: currentCase?.state_jurisdiction || updatedStructuredState.jurisdiction?.state,
-        city: currentCase?.city_jurisdiction || updatedStructuredState.jurisdiction?.city
+        state: currentCase?.state_jurisdiction || finalStructuredState.jurisdiction?.state,
+        city: currentCase?.city_jurisdiction || finalStructuredState.jurisdiction?.city
       },
-      structuredState: updatedStructuredState,
+      structuredState: finalStructuredState,
+      masterMarkdown: masterMarkdown,
       identity: {
-        full_name: updatedStructuredState.identity?.full_name || userName,
-        address: updatedStructuredState.identity?.address
+        full_name: finalStructuredState.identity?.full_name || userName,
+        address: finalStructuredState.identity?.address
       }
     };
 
     const data = await generateResponse(userMessages, userName, caseContext);
     debugLog(`AI response generated successfully for ${req.url}`);
 
-    // Persistir estado estructurado actualizado y jurisdicción/identidad en legal_cases
+    // Persistir estado estructurado actualizado y sincronizar EXPEDIENTE_MAESTRO.md en legal_cases y case_vault_documents
     if (currentCase?.id && supabaseAdmin) {
       try {
         const updatePayload: any = {
-          structured_state: updatedStructuredState,
+          structured_state: finalStructuredState,
           updated_at: new Date().toISOString()
         };
 
-        if (updatedStructuredState.jurisdiction?.state && (!currentCase.state_jurisdiction || currentCase.state_jurisdiction.includes('Por definir') || currentCase.state_jurisdiction.includes('Nacional'))) {
-          updatePayload.state_jurisdiction = updatedStructuredState.jurisdiction.state;
-          if (updatedStructuredState.jurisdiction.city) {
-            updatePayload.city_jurisdiction = updatedStructuredState.jurisdiction.city;
+        if (finalStructuredState.jurisdiction?.state && (!currentCase.state_jurisdiction || currentCase.state_jurisdiction.includes('Por definir') || currentCase.state_jurisdiction.includes('Nacional'))) {
+          updatePayload.state_jurisdiction = finalStructuredState.jurisdiction.state;
+          if (finalStructuredState.jurisdiction.city) {
+            updatePayload.city_jurisdiction = finalStructuredState.jurisdiction.city;
           }
         }
 
-        if (updatedStructuredState.identity?.full_name && (!currentCase.victim_name || currentCase.victim_name === 'Usuario')) {
-          updatePayload.victim_name = updatedStructuredState.identity.full_name;
+        if (finalStructuredState.identity?.full_name && (!currentCase.victim_name || currentCase.victim_name === 'Usuario')) {
+          updatePayload.victim_name = finalStructuredState.identity.full_name;
         }
 
         await supabaseAdmin.from('legal_cases').update(updatePayload).eq('id', currentCase.id);
+
+        // Sincronizar documento EXPEDIENTE_MAESTRO.md en case_vault_documents con verificación post-escritura
+        await persistMasterMemory(supabaseAdmin, memoryMeta, finalStructuredState, masterMarkdown);
       } catch (saveErr) {
-        console.warn("Aviso al guardar structured_state:", saveErr);
+        console.warn("Aviso al guardar structured_state y memoria maestra:", saveErr);
       }
     }
 
@@ -1600,11 +1631,258 @@ app.get("/api/v1/cases/readiness", authMiddleware, async (req, res) => {
 
     const currentCase = cases[0];
     const structuredState = currentCase.structured_state || {};
-    const readiness = evaluateInformationSufficiency(structuredState, currentCase.case_type || 'alimentos');
+    const comprehensive = evaluateComprehensiveSufficiency(structuredState);
+    const legacy = evaluateInformationSufficiency(structuredState, currentCase.case_type || 'alimentos');
 
     res.json({
       caseId: currentCase.id,
-      readiness
+      readiness: {
+        ...legacy,
+        ...comprehensive
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// MOTOR DE CONTRADICCIONES: Protocolo de resolución neutral con trazabilidad (Sección 6)
+app.post("/api/v1/cases/resolve-contradiction", authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { caseId, contradictionId, userClarification, justificationReason } = req.body;
+
+    if (!userId || !contradictionId || !userClarification) {
+      return res.status(400).json({ error: "caseId, contradictionId y userClarification son requeridos." });
+    }
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Supabase no está configurado." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    let query = supabaseAdmin.from('legal_cases').select('*').eq('user_id', userId);
+    if (caseId) query = query.eq('id', caseId);
+    const { data: cases, error } = await query.order('updated_at', { ascending: false }).limit(1);
+
+    if (error || !cases || cases.length === 0) {
+      return res.status(404).json({ error: "Expediente no encontrado para este usuario." });
+    }
+
+    const currentCase = cases[0];
+    const structuredState = currentCase.structured_state || {};
+    const contradictions = structuredState.contradictions_detected || [];
+
+    const { updatedList, resolved } = resolveContradictionProtocol(
+      contradictions,
+      contradictionId,
+      userClarification,
+      justificationReason || "Aclaración aportada voluntariamente por el usuario"
+    );
+
+    if (!resolved) {
+      return res.status(404).json({ error: "Contradicción no encontrada en el expediente." });
+    }
+
+    // Actualizar historial y estado
+    const correctionsHistory = Array.isArray(structuredState.corrections_history) ? [...structuredState.corrections_history] : [];
+    correctionsHistory.push({
+      field: `contradiction:${contradictionId}`,
+      previous_value: 'DETECTADA',
+      new_value: 'RESUELTA_JUSTIFICADA',
+      timestamp: new Date().toISOString(),
+      reason: userClarification
+    });
+
+    const updatedState = {
+      ...structuredState,
+      contradictions_detected: updatedList,
+      corrections_history: correctionsHistory
+    };
+
+    // Actualizar hechos de contradicciones abiertas
+    updatedState.facts.contradictions = updatedList
+      .filter((c: any) => c.status === 'DETECTADA')
+      .map((c: any) => `[${c.severity}] ${c.description}`);
+
+    const { data: savedCase, error: updateErr } = await supabaseAdmin
+      .from('legal_cases')
+      .update({
+        structured_state: updatedState,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentCase.id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    res.json({
+      success: true,
+      caseId: currentCase.id,
+      resolved: true,
+      contradictions_detected: savedCase.structured_state.contradictions_detected
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// BASE DE CONOCIMIENTO ACUMULATIVA: Consulta de patrones anonimizados seguros (Sección 12)
+app.get("/api/v1/knowledge/patterns", authMiddleware, (req, res) => {
+  try {
+    const matter = req.query.matter as string;
+    const docType = req.query.docType as string;
+
+    const classBPatterns = knowledgeBase.getInvestigationPatterns(matter);
+    const classCOperational = knowledgeBase.getOperationalPatterns(docType);
+
+    res.json({
+      success: true,
+      matter: matter || 'todas',
+      investigation_patterns: classBPatterns,
+      operational_patterns: classCOperational
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// MEMORIA VIVA Y EXPEDIENTE MAESTRO: Consulta del archivo maestro persistente (Sección 2 y 7)
+app.get("/api/v1/cases/:id/master-memory", authMiddleware, async (req: any, res) => {
+  try {
+    const caseId = req.params.id;
+    const userId = req.user.id;
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '';
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Configuración de Supabase no disponible." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: legalCase, error: caseErr } = await supabaseAdmin
+      .from('legal_cases')
+      .select('id, user_id, title, status, structured_state, updated_at')
+      .eq('id', caseId)
+      .single();
+
+    if (caseErr || !legalCase) {
+      return res.status(404).json({ error: "Expediente no encontrado." });
+    }
+
+    // Aislamiento estricto de usuario (Sección 7)
+    if (legalCase.user_id !== userId) {
+      return res.status(403).json({
+        error: "Acceso denegado: no eres el propietario de este expediente.",
+        code: "FORBIDDEN"
+      });
+    }
+
+    const state = legalCase.structured_state || {};
+    let markdown = state.master_markdown?.markdown_content;
+
+    if (!markdown) {
+      markdown = generateMasterMarkdown(state, {
+        caseId,
+        userId,
+        title: legalCase.title
+      });
+    }
+
+    res.json({
+      success: true,
+      case_id: caseId,
+      version: state.master_markdown?.version || 1,
+      last_updated_at: state.master_markdown?.last_updated_at || legalCase.updated_at,
+      content_hash: state.master_markdown?.content_hash || computeContentHash(markdown),
+      markdown_content: markdown,
+      update_log: state.master_markdown?.update_log || [],
+      facts_count: (state.facts_registry || []).length,
+      contradictions_count: (state.contradictions_detected || []).length
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// RECONSTRUCCIÓN DETERMINÍSTICA DE EXPEDIENTE_MAESTRO.MD DESDE LA FUENTE DE VERDAD (Sección 7 y 10)
+app.post("/api/v1/cases/:id/master-memory/rebuild", authMiddleware, async (req: any, res) => {
+  try {
+    const caseId = req.params.id;
+    const userId = req.user.id;
+
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || config.supabaseUrl;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '';
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({ error: "Configuración de Supabase no disponible." });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: legalCase, error: caseErr } = await supabaseAdmin
+      .from('legal_cases')
+      .select('id, user_id, title, structured_state')
+      .eq('id', caseId)
+      .single();
+
+    if (caseErr || !legalCase) {
+      return res.status(404).json({ error: "Expediente no encontrado." });
+    }
+
+    if (legalCase.user_id !== userId) {
+      return res.status(403).json({
+        error: "Acceso denegado: no eres el propietario de este expediente.",
+        code: "FORBIDDEN"
+      });
+    }
+
+    const state = legalCase.structured_state || {};
+    const meta = { caseId, userId, title: legalCase.title };
+    const reconstructedMarkdown = reconstructMarkdownFromState(state, meta);
+
+    const persistRes = await persistMasterMemory(
+      supabaseAdmin,
+      meta,
+      {
+        ...state,
+        master_markdown: {
+          case_id: caseId,
+          user_id: userId,
+          version: (state.master_markdown?.version || 1) + 1,
+          markdown_content: reconstructedMarkdown,
+          content_hash: computeContentHash(reconstructedMarkdown),
+          last_updated_at: new Date().toISOString(),
+          update_log: [
+            {
+              version: (state.master_markdown?.version || 1) + 1,
+              timestamp: new Date().toISOString(),
+              change_type: 'initial_creation',
+              summary: 'Reconstrucción forzosa determinística desde la fuente de verdad (structured_state).',
+              affected_fields: ['master_markdown']
+            },
+            ...(state.master_markdown?.update_log || [])
+          ]
+        }
+      },
+      reconstructedMarkdown
+    );
+
+    res.json({
+      success: persistRes.success,
+      version: persistRes.version,
+      reconstructed: true,
+      markdown_content: reconstructedMarkdown
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

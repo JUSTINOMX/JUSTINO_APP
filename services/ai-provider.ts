@@ -1,4 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
+import { classifyMatter, discoverLegalPathways, buildRequirementsMap, getNextOptimalInquiry } from "./investigation-engine";
+import { detectUniversalContradictions } from "./contradiction-engine";
+import { performLegalResearch } from "./legal-research";
+import { evaluateComprehensiveSufficiency } from "./sufficiency-engine";
+import { knowledgeBase } from "./knowledge-base";
 
 const JUSTINO_SYSTEM_PROMPT = `ERES "JUSTINO", EL GUIADOR Y ASISTENTE LEGAL DIGITAL LÍDER EN MÉXICO.
 TU MISIÓN: Resolver la situación legal del usuario de principio a fin, trazando una estrategia legal clara, redactando sus documentos jurídicos completos y diciéndole exactamente a dónde y cómo entregarlos, eliminando por completo la necesidad de abogados o intermediarios costosos.
@@ -116,6 +121,44 @@ ESTRUCTURA Y REGLAS OBLIGATORIAS DE INTERACCIÓN DE JUSTINO:
     - TIENES ESTRICTAMENTE PROHIBIDO afirmar que la ley otorga un porcentaje fijo o automático (como afirmar falsamente "la ley fija el 30% al 40% obligatorio").
     - NUNCA garantices medidas cautelares automáticas ni decisiones judiciales.
     - Si se desconoce el domicilio del demandado, explica con precisión la vía procesal real: solicitar al juez oficios de localización y búsqueda dirigidos a instituciones públicas (INE, IMSS, SAT) o notificación por edictos.
+
+16. PROHIBICIÓN DE CUESTIONARIOS FIJOS Y ADAPTACIÓN DINÁMICA (UNA PREGUNTA POR TURNO):
+    - TIENES ESTRICTAMENTE PROHIBIDO aplicar un cuestionario fijo o universal de preguntas en bloque.
+    - Cada pregunta debe responder a una necesidad jurídica concreta derivada del problema específico (familiar, arrendamiento, penal, mercantil, laboral o civil).
+    - Formula PREFERENTEMENTE UNA SOLA PREGUNTA PRINCIPAL POR MENSAJE, acompañada de una explicación breve y cálida de por qué ese dato es jurídicamente relevante.
+    - Si el dato ya fue proporcionado anteriormente de forma consistente, NUNCA lo vuelvas a preguntar.
+
+17. PROTOCOLO OBLIGATORIO DE CONTRADICCIONES:
+    - Cuando exista una discrepancia en nombres, apellidos (ej. menor que no comparte apellidos del padre), fechas, montos, lugares o documentos:
+      1. NUNCA elijas silenciosamente una versión ni des por hecho una falsedad.
+      2. NUNCA acuses al usuario ni uses tono punitivo.
+      3. Formula una pregunta neutral planteando con serenidad las versiones detectadas y solicita la precisión necesaria para asentar la verdad procesal.
+
+18. COMPARACIÓN DE VÍAS ALTERNATIVAS ANTES DE REDACTAR:
+    - Antes de sugerir cualquier escrito formal, identifica y compara al menos dos vías jurídicas o extrajudiciales razonables (ej. Juicio Contencioso vs Mediación en Centro de Justicia Alternativa o Requerimiento Notarial).
+    - Explica con total transparencia las ventajas, desventajas, costos, plazos estimados y riesgos de cada alternativa.
+
+19. ESTRUCTURA DE EXPLICACIÓN RAZONADA DE 10 PUNTOS:
+    - Cuando alcances la suficiencia de información para emitir un diagnóstico integral, presenta de forma ordenada:
+      1. Qué entiendes del problema.
+      2. Qué hechos conoces y su fuente.
+      3. Qué hechos continúan pendientes de verificar.
+      4. Qué contradicciones se detectaron y cómo quedaron aclaradas.
+      5. Qué vías jurídicas son viables.
+      6. Ventajas, riesgos y plazos de cada vía.
+      7. Qué información sobrevenida podría alterar el diagnóstico.
+      8. Qué opción concreta recomiendas y por qué.
+      9. Qué primer paso formal conviene dar.
+      10. Qué requisitos faltan para ejecutar ese paso.
+
+20. AISLAMIENTO ESTRICTO DE PRIVACIDAD EN EL APRENDIZAJE:
+    - Los patrones de aprendizaje son abstractos y anonimizados. Jamás compartas, cites ni insinúes nombres, domicilios, documentos o datos de un expediente en las consultas de otros usuarios.
+
+21. MEMORIA VIVA Y EXPEDIENTE MAESTRO (EXPEDIENTE_MAESTRO.MD):
+    - Cada caso cuenta con un archivo maestro vivo denominado EXPEDIENTE_MAESTRO.md como representación estructurada y verificable.
+    - Antes de formular una pregunta o proponer un trámite, consulta este archivo maestro para saber qué hechos ya están registrados (para no repetirlos), qué fuentes los respaldan y qué contradicciones están pendientes.
+    - Nunca repitas preguntas sobre datos ya asentados en el expediente.
+    - Cuando se resuelva o aclare una discrepancia, conserva la trazabilidad de ambas versiones sin descartar silenciosamente el historial.
 `;
 
 // State tracking for failed authentication credentials to avoid stalling consecutive user turns
@@ -469,8 +512,65 @@ export const extractCandidateFacts = (userMessages: any[], existingState?: any) 
   // Sync backwards compatible alias
   state.facts.alleged = state.facts.alleged_unverified;
 
-  // Actualizar evaluación de suficiencia
-  state.readiness = evaluateInformationSufficiency(state, 'alimentos');
+  // --- MOTOR DE INVESTIGACIÓN JURÍDICA DINÁMICA (SECCIONES 3, 5, 7, 8, 9, 12) ---
+  const conversationCombined = onlyUserTexts.join('\n\n');
+
+  // 1. Clasificación provisional de materia (Fase A)
+  state.matter_classification = classifyMatter(conversationCombined, state.matter_classification);
+
+  // 2. Descubrimiento dinámico de vías alternativas (Fase B)
+  state.legal_pathways = discoverLegalPathways(state.matter_classification, conversationCombined);
+
+  // 3. Mapa dinámico de requisitos en 11 estados (Fase C)
+  state.requirements_map = buildRequirementsMap(
+    state.matter_classification,
+    state.legal_pathways,
+    state.requirements_map || [],
+    conversationCombined
+  );
+
+  // 4. Motor universal de contradicciones en 6 categorías (Sección 5)
+  state.contradictions_detected = detectUniversalContradictions({
+    userMessages,
+    existingContradictions: state.contradictions_detected || [],
+    participants: state.participants,
+    dates: state.dates,
+    amounts: state.amounts,
+    evidence: state.evidence,
+    jurisdiction: state.jurisdiction
+  });
+
+  // Sincronizar hechos contradictorios para trazabilidad
+  state.facts.contradictions = (state.contradictions_detected || [])
+    .filter(c => c.status === 'DETECTADA')
+    .map(c => `[${c.severity}] ${c.description}`);
+
+  // 5. Investigación jurídica en tiempo real con fuentes oficiales (Sección 7)
+  if (!state.legal_research_log || state.legal_research_log.length === 0) {
+    const topic = state.matter_classification.primary_matter === 'familiar'
+      ? 'proporcionalidad en pensión alimenticia'
+      : (state.matter_classification.primary_matter === 'arrendamiento' ? 'desahucio y pago de rentas' : 'medidas de protección urgentes');
+    const record = performLegalResearch(topic, state.jurisdiction?.state);
+    state.legal_research_log = [record];
+  }
+
+  // 6. Evaluación integral de suficiencia (Sección 9)
+  const compSufficiency = evaluateComprehensiveSufficiency(state);
+  state.readiness = {
+    is_ready_for_legal_draft: compSufficiency.is_ready_for_legal_draft,
+    missing_indispensable_requirements: compSufficiency.missing_critical_requirements,
+    information_sufficiency_score: compSufficiency.sufficiency_score,
+    current_phase: compSufficiency.is_ready_for_legal_draft
+      ? 'authorized_draft'
+      : (compSufficiency.is_ready_for_strategy_recommendation ? 'readiness_check' : 'interview_preliminary')
+  };
+
+  // 7. Siguiente pregunta óptima basada en el mapa dinámico (Sección 4: 1 pregunta por turno)
+  state.active_inquiry = getNextOptimalInquiry(
+    state.requirements_map,
+    state.contradictions_detected,
+    state.readiness.current_phase
+  );
 
   return state;
 };
@@ -484,6 +584,7 @@ export async function generateResponse(
     jurisdiction?: { state?: string | null; city?: string | null; authority?: string | null };
     structuredState?: any;
     identity?: { full_name?: string | null; address?: string | null };
+    masterMarkdown?: string;
   }
 ) {
   const deepseekKey = (process.env.DEEPSEEK_API_KEY || "").trim();
@@ -618,7 +719,43 @@ REGLAS DE RAZONAMIENTO FORENSE VINCULANTES:
 - REGLA DE JURISDICCIÓN ESTRICTA: La jurisdicción procesal es ${stateName || 'Chihuahua'}. Queda TERMINANTEMENTE PROHIBIDO citar juzgados, códigos o dependencias de la Ciudad de México cuando el caso pertenezca a otra entidad federativa.
 `;
 
-  const userPromptAddon = `\n${temporalBlock}\n${jurisdictionBlock}\n${identityBlock}\n${structuredMemoryBlock}\n\nDATOS DEL CLIENTE:\nEl usuario se llama "${clientDisplayName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`;
+  const dynamicInvestigationBlock = `
+====================================================================
+MOTOR DE INVESTIGACIÓN JURÍDICA DINÁMICA Y VÍAS COMPARADAS
+====================================================================
+MATERIA Y OBJETIVO DETECTADOS (PROVISIONAL):
+- Rama Jurídica Principal: ${st?.matter_classification?.primary_matter?.toUpperCase() || 'CIVIL/FAMILIAR'} (Confianza: ${Math.round((st?.matter_classification?.confidence || 0.8) * 100)}%)
+- Objetivo del Promovente: ${st?.matter_classification?.user_objective || 'Resolver conflicto y salvaguardar derechos'}
+- Estado actual de la situación: ${st?.matter_classification?.current_situation || 'En diagnóstico preliminar'}
+
+VÍAS ALTERNATIVAS DISPONIBLES (MÍNIMO 2 COMPARADAS):
+${(st?.legal_pathways || []).length > 0 ? (st?.legal_pathways || []).map((p: any) => `  * [${p.status.toUpperCase()}] ${p.name} (${p.type}):
+    - Pros: ${p.pros.join(', ')}
+    - Contras/Límites: ${p.cons.join(', ')}
+    - Riesgos: ${p.risks.join(', ')}
+    - Autoridad: ${p.competent_authority}`).join('\n') : '  * En análisis de vías viables.'}
+
+MAPA DINÁMICO DE REQUISITOS (11 ESTADOS DE CONOCIMIENTO):
+${(st?.requirements_map || []).length > 0 ? (st?.requirements_map || []).map((r: any) => `  * [${r.status}] (${r.importance}) ${r.description} -> Motivo: ${r.legal_reason}`).join('\n') : '  * Mapa de requisitos en construcción.'}
+
+CONTRADICCIONES DETECTADAS (PROTOCOLO NEUTRAL DE RESOLUCIÓN):
+${(st?.contradictions_detected || []).length > 0 ? (st?.contradictions_detected || []).map((c: any) => `  * ATENCIÓN [${c.severity}] ${c.category.toUpperCase()}: ${c.description} (Pregunta asignada: "${c.question_to_clarify}")`).join('\n') : '  * Ninguna contradicción abierta detectada.'}
+
+FUENTES JURÍDICAS VERIFICADAS:
+${(st?.legal_research_log || []).length > 0 ? (st?.legal_research_log || []).map((l: any) => `  * [${l.validity_confirmed ? 'OFICIAL_VERIFICADO' : 'POR_VERIFICAR'}] ${l.norm_citation} (${l.source_name}) - Fecha: ${l.consultation_date}`).join('\n') : '  * Consultando legislación mexicana vigente.'}
+
+INSTRUCCIÓN DE LA SIGUIENTE PREGUNTA ÓPTIMA:
+${st?.active_inquiry ? `-> Formular de forma cálida, humana y natural: "${st.active_inquiry.question}" (Justificación jurídica: ${st.active_inquiry.legalReason})` : '-> Continuar escucha empática del usuario.'}
+`;
+
+  const masterMarkdownBlock = (caseContext?.masterMarkdown || st?.master_markdown?.markdown_content) ? `
+====================================================================
+ARCHIVO MAESTRO VIGENTE DEL CASO (EXPEDIENTE_MAESTRO.MD)
+====================================================================
+${(caseContext?.masterMarkdown || st?.master_markdown?.markdown_content).slice(0, 3500)}
+` : '';
+
+  const userPromptAddon = `\n${temporalBlock}\n${jurisdictionBlock}\n${identityBlock}\n${dynamicInvestigationBlock}\n${masterMarkdownBlock}\n${structuredMemoryBlock}\n\nDATOS DEL CLIENTE:\nEl usuario se llama "${clientDisplayName}". Dirígete a él o ella por su nombre con calidez, respeto y empatía.`;
 
   const effectiveSystemPrompt = `${JUSTINO_SYSTEM_PROMPT}${userPromptAddon}`;
 

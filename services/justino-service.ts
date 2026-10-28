@@ -223,15 +223,28 @@ export const validateDocumentSufficiency = (
     };
   }
 
+  // 1. Bloqueo por contradicciones abiertas (Sección 6 & 8)
+  const openContradictions = (structuredState.contradictions_detected || []).filter(
+    (c: any) => c.status === 'DETECTADA' && (c.severity === 'CRITICA' || c.severity === 'ALTA')
+  );
+
   const readiness = structuredState.readiness || { is_ready_for_legal_draft: false, missing_indispensable_requirements: [] };
-  const missing = readiness.missing_indispensable_requirements || [];
+  const missing = [...(readiness.missing_indispensable_requirements || [])];
+
+  if (openContradictions.length > 0) {
+    openContradictions.forEach((c: any) => missing.push(`Inconsistencia sin resolver: ${c.description}`));
+  }
+
+  const isReady = Boolean(readiness.is_ready_for_legal_draft) && openContradictions.length === 0;
 
   return {
-    isReady: Boolean(readiness.is_ready_for_legal_draft),
+    isReady,
     missingRequirements: missing,
-    reason: readiness.is_ready_for_legal_draft 
+    reason: isReady 
       ? undefined 
-      : `No es posible emitir un documento definitivo porque faltan requisitos indispensables: ${missing.join(', ')}`
+      : (openContradictions.length > 0
+          ? `No es posible emitir un documento definitivo mientras existan contradicciones críticas o altas abiertas: ${openContradictions.map((c: any) => c.description).join('; ')}`
+          : `No es posible emitir un documento definitivo porque faltan requisitos indispensables: ${missing.join(', ')}`)
   };
 };
 
