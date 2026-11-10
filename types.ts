@@ -54,7 +54,21 @@ export interface VaultFile {
   supersedesDocumentId?: string;
 }
 
+export type CaseProcessingStage =
+  | 'NUEVO_CASO'
+  | 'COMPRENSION_INICIAL'
+  | 'ENTREVISTA_EN_CURSO'
+  | 'RECONSTRUCCION_DE_HECHOS'
+  | 'INFORMACION_PENDIENTE'
+  | 'EVIDENCIA_EN_REVISION'
+  | 'ANALISIS_PRELIMINAR'
+  | 'ESTRATEGIA_PROPUESTA'
+  | 'DOCUMENTACION'
+  | 'EN_SEGUIMIENTO'
+  | 'CERRADO';
+
 export interface CaseStructuredState {
+  case_stage?: CaseProcessingStage;
   identity: {
     full_name: string | null;
     address: string | null;
@@ -62,6 +76,12 @@ export interface CaseStructuredState {
     state: string | null;
     postal_code: string | null;
     colonia?: string | null;
+    address_status?: 'confirmed' | 'unknown' | 'reserved_privacy' | 'approximate';
+  };
+  privacy_preferences?: {
+    domicile_reserved?: boolean;
+    domicile_reservation_reason?: string;
+    phone_reserved?: boolean;
   };
   jurisdiction: {
     country: string;
@@ -82,6 +102,28 @@ export interface CaseStructuredState {
     status?: string;
     known_information?: string;
   }>;
+  labor_details?: {
+    employer_name?: string | null;
+    workplace_address?: string | null;
+    position_title?: string | null;
+    seniority_approx?: string | null;
+    start_date?: string | null;
+    termination_date?: string | null;
+    termination_mode?: 'despido_verbal' | 'despido_escrito' | 'renuncia_presunta' | 'rescision_patronal' | 'separacion_voluntaria' | 'desconocido';
+    written_notice_delivered?: boolean | null;
+    written_notice_notes?: string;
+    contract_status?: 'DESCONOCIDO' | 'CONFIRMADO_EXISTE' | 'CONFIRMADO_INEXISTENTE' | 'NO_RECUERDA' | string;
+    schedule_original?: string | null;
+    schedule_modified?: string | null;
+    schedule_change_agreed?: boolean | 'NO_RECUERDA' | null;
+    schedule_notes?: string;
+    salary_daily?: number | null;
+    salary_frequency?: string | null;
+    salary_amount?: number | string | null;
+    unpaid_concepts?: string[];
+    prejudicial_conciliation_status?: 'no_iniciada' | 'citatorio_emitido' | 'en_audiencia' | 'no_conciliacion' | 'convenio';
+    prescription_deadline_approx?: string | null;
+  };
   facts: {
     confirmed: string[];
     alleged_unverified: string[];
@@ -181,16 +223,24 @@ export interface CaseStructuredState {
   master_markdown_version?: number;
 }
 
-// ESTADOS DE VERIFICACIÓN DE HECHOS (MÓDULO MEMORIA VIVA - SECCIÓN 4)
+// ESTADOS DE VERIFICACIÓN DE HECHOS (MÓDULO MEMORIA VIVA - TAXONOMÍA RIGUROSA DE 6+ NIVELES)
 export type FactVerificationStatus =
+  | 'CONFIRMADO_POR_USUARIO'
   | 'DECLARADO_POR_USUARIO'
+  | 'DECLARADO_PENDIENTE_VERIFICACION'
   | 'DECLARADO_POR_TERCERO'
+  | 'DOCUMENTADO'
   | 'EXTRAIDO_DE_DOCUMENTO'
+  | 'VERIFICADO'
   | 'VERIFICADO_DOCUMENTALMENTE'
   | 'VERIFICADO_CON_FUENTE_EXTERNA'
+  | 'INFERIDO'
   | 'INFERIDO_PROVISIONAL'
+  | 'HIPOTESIS'
   | 'DESCONOCIDO'
   | 'CONTRADICTORIO'
+  | 'RESERVADO_PRIVACIDAD'
+  | 'CONCLUSION_JURIDICA_SUJETA_A_VERIFICACION'
   | 'CORREGIDO_CON_HISTORIAL';
 
 export interface MasterFactItem {
@@ -241,7 +291,7 @@ export interface MasterMarkdownState {
   update_log: MasterMemoryUpdateLogEntry[];
 }
 
-// 11 ESTADOS PERMITIDOS DEL MAPA DINÁMICO DE REQUISITOS (FASE C)
+// 11+ ESTADOS PERMITIDOS DEL MAPA DINÁMICO DE REQUISITOS (FASE C Y PRIVACIDAD)
 export type RequirementStatus =
   | 'DESCONOCIDO'
   | 'PREGUNTA_PENDIENTE'
@@ -253,7 +303,8 @@ export type RequirementStatus =
   | 'CONTRADICTORIO'
   | 'NO_APLICA_JUSTIFICADO'
   | 'NO_VERIFICABLE'
-  | 'RESUELTO_CON_LIMITACIONES';
+  | 'RESUELTO_CON_LIMITACIONES'
+  | 'RESERVADO_POR_PRIVACIDAD';
 
 export type RequirementImportance = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
 

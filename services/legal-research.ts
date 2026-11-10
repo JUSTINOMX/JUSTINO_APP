@@ -46,6 +46,56 @@ export const OFFICIAL_LEGAL_CORPUS = [
     sourceName: 'Cámara de Diputados del H. Congreso de la Unión',
     url: 'https://diputados.gob.mx/LeyesBiblio/pdf/CNPP.pdf',
     rule: 'El Ministerio Público, bajo su más estricta responsabilidad, ordenará fundada y motivadamente la aplicación de medidas de protección urgentes cuando estime que el imputado representa un riesgo inminente.'
+  },
+  {
+    topic: 'laboral_despido_aviso_rescision',
+    jurisdiction: 'Nacional / Federal y Local',
+    norm: 'Ley Federal del Trabajo (LFT)',
+    articles: 'Arts. 47, 48, 518, 522',
+    authority: 'Congreso de la Unión / Secretaría del Trabajo y Previsión Social',
+    sourceName: 'Diario Oficial de la Federación (DOF)',
+    url: 'https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf',
+    rule: 'El patrón que rescinda la relación debe entregar aviso escrito con causa y fechas. La falta de aviso presume el despido injustificado (art. 47 penúltimo párrafo LFT), operando como hipótesis de reclamación con presunción legal jure tantum. La acción de despido prescribe en dos meses contados a partir del día siguiente a la fecha de la separación conforme al artículo 518 párrafo primero de la LFT. Conforme al artículo 522 de la LFT, los meses se regulan por el número de días que les corresponden según el calendario (cómputo de fecha a fecha y no automáticamente sesenta días naturales), los días se entenderán de veinticuatro horas naturales contadas de las veinticuatro a las veinticuatro, el primer día se computará íntegro y el día en que la prescripción concluya deberá ser completo; si fuere feriado o inhábil, la prescripción se tendrá por cumplida el primer día útil siguiente.'
+  },
+  {
+    topic: 'laboral_conciliacion_obligatoria_y_suspension',
+    jurisdiction: 'Nacional / Instancia Prejudicial y Suspensión de Prescripción',
+    norm: 'Ley Federal del Trabajo (LFT)',
+    articles: 'Arts. 518, 521 frac. III, 684-B, 684-D',
+    authority: 'Centro de Conciliación Laboral Local / Centro Federal (CFCRL)',
+    sourceName: 'Diario Oficial de la Federación (DOF)',
+    url: 'https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf',
+    rule: 'Antes de acudir a los Tribunales Laborales es forzoso agotar la conciliación prejudicial por regla general (art. 684-B LFT). Conforme a los artículos 518 y 521 fracción III de la LFT, la sola presentación de la solicitud de conciliación suspende el plazo e interrumpe la prescripción de dos meses. Dicha suspensión/interrupción cesará y el cómputo se reanudará a partir del día siguiente a aquel en que el Centro de Conciliación expida la constancia de no conciliación o se determine el archivo del expediente. Asimismo, el procedimiento de conciliación prejudicial no deberá exceder de 45 días naturales conforme al artículo 684-D de la LFT.'
+  },
+  {
+    topic: 'laboral_excepciones_conciliacion',
+    jurisdiction: 'Nacional / Acceso Directo a Tribunal Laboral',
+    norm: 'Ley Federal del Trabajo (LFT)',
+    articles: 'Art. 685-Ter',
+    authority: 'Congreso de la Unión / Poder Judicial de la Federación y Tribunales Locales',
+    sourceName: 'Diario Oficial de la Federación (DOF)',
+    url: 'https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf',
+    rule: 'Quedan expresamente exceptuados de agotar la instancia conciliatoria prejudicial y de exhibir constancia de no conciliación los conflictos por discriminación en el empleo (por embarazo, orientación sexual, raza, etc.), acoso u hostigamiento sexual, prestaciones de seguridad social, trata laboral, trabajo infantil y tutela de derechos fundamentales (art. 685-Ter LFT).'
+  },
+  {
+    topic: 'laboral_competencia_local_vs_federal',
+    jurisdiction: 'Nacional / Fuero Local vs Fuero Federal',
+    norm: 'Constitución Política de los Estados Unidos Mexicanos (CPEUM) y Ley Federal del Trabajo (LFT)',
+    articles: 'Art. 123 apartado A frac. XXXI CPEUM; Arts. 527, 698 LFT',
+    authority: 'Centros de Conciliación Laboral y Tribunales Laborales Locales y Federales',
+    sourceName: 'Diario Oficial de la Federación (DOF)',
+    url: 'https://www.diputados.gob.mx/LeyesBiblio/pdf/CPEUM.pdf',
+    rule: 'La competencia federal en materia laboral está estrictamente tasada a las 22 ramas industriales y de servicios previstas en el art. 123 apartado A frac. XXXI de la CPEUM y art. 527 de la LFT (hidrocarburos, minería, automotriz, química, banca y crédito, etc.). Las actividades comerciales al por mayor o al por menor, prestación de servicios y distribución general corresponden al fuero local de la entidad federativa donde se ubica el centro de trabajo (art. 698 LFT).'
+  },
+  {
+    topic: 'laboral_contrato_carga_patronal',
+    jurisdiction: 'Nacional / Relaciones Individuales de Trabajo',
+    norm: 'Ley Federal del Trabajo (LFT)',
+    articles: 'Arts. 26, 784 frac. VII',
+    authority: 'Congreso de la Unión',
+    sourceName: 'Diario Oficial de la Federación (DOF)',
+    url: 'https://www.diputados.gob.mx/LeyesBiblio/pdf/LFT.pdf',
+    rule: 'La falta de contrato de trabajo por escrito no perjudica al trabajador: la ley imputa dicha omisión al patrón (art. 26 LFT). Además, el art. 784 exime al trabajador de la carga de probar el contrato y atribuye al patrón la obligación de exhibirlo en juicio.'
   }
 ];
 
@@ -56,7 +106,7 @@ export const performLegalResearch = (
   const q = legalQuestion.toLowerCase();
   const now = new Date();
   const dateFormatted = now.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-  const targetJurisdiction = jurisdictionState || 'Chihuahua / Nacional';
+  const targetJurisdiction = jurisdictionState || 'Nacional';
 
   let match = OFFICIAL_LEGAL_CORPUS.find(item => 
     q.includes('alimento') || q.includes('pensi') || q.includes('proporcional')
@@ -68,6 +118,16 @@ export const performLegalResearch = (
     match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'arrendamiento_desahucio');
   } else if (q.includes('protecci') || q.includes('denuncia') || q.includes('penal')) {
     match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'medidas_proteccion_penal');
+  } else if (q.includes('excepci') || q.includes('685-ter') || q.includes('acoso') || q.includes('discriminaci')) {
+    match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'laboral_excepciones_conciliacion');
+  } else if (q.includes('competencia') || q.includes('fuero') || q.includes('federal') || q.includes('local') || q.includes('rama')) {
+    match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'laboral_competencia_local_vs_federal');
+  } else if (q.includes('concilia') || q.includes('ccl') || q.includes('cfrcl') || q.includes('prejudicial') || q.includes('suspensi')) {
+    match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'laboral_conciliacion_obligatoria_y_suspension');
+  } else if (q.includes('contrato') && (q.includes('laboral') || q.includes('patr') || q.includes('trabaj'))) {
+    match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'laboral_contrato_carga_patronal');
+  } else if (q.includes('laboral') || q.includes('despido') || q.includes('rescision') || q.includes('liquidac') || q.includes('finiquito') || q.includes('prescripci')) {
+    match = OFFICIAL_LEGAL_CORPUS.find(item => item.topic === 'laboral_despido_aviso_rescision');
   }
 
   if (match) {

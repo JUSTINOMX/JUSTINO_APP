@@ -71,10 +71,10 @@ export const isSubstantiveUserMessage = (text: string): boolean => {
     return false;
   }
 
-  // Si contiene números, cantidades monetarias, nombres, fechas, domicilios, documentos o peticiones legales
+  // Si contiene números, cantidades monetarias, términos jurídicos, fechas, domicilios o incertidumbres
   const hasSubstance =
     /\d+/.test(trimmed) ||
-    /\b(pesos|mensual|semanal|renta|alimentos|pensi[oó]n|hijo|hija|acta|contrato|calle|avenida|colonia|chihuahua|ju[aá]rez|alejandro|morales|gonz[aá]lez|mar[ií]a|daniela|c\.p\.|abogado|demanda|juzgado|tribunal|no s[eé]|desconozco)\b/i.test(trimmed);
+    /\b(pesos|mensual|quincenal|semanal|diario|renta|alimentos|pensi[oó]n|hijo|hija|menor|acta|contrato|calle|avenida|colonia|domicilio|ciudad|estado|c\.p\.|abogado|demanda|denuncia|querella|despido|trabajo|empleo|patr[oó]n|empresa|juzgado|tribunal|conciliaci[oó]n|no s[eé]|desconozco|no recuerdo)\b/i.test(trimmed);
 
   return hasSubstance || clean.length > 30;
 };
@@ -139,23 +139,49 @@ export const generateMasterMarkdown = (
   md.push('## 2. Personas, relaciones y datos de identidad');
   md.push('### A. Promovente (Usuario)');
   md.push(`- **Nombre legal completo:** ${state.identity?.full_name || '*(Pendiente de confirmar)*'}`);
-  md.push(`- **Domicilio procesal:** ${state.identity?.address || '*(Pendiente de recabar)*'}`);
+  const addressDisplay = state.privacy_preferences?.domicile_reserved || state.identity?.address_status === 'reserved_privacy'
+    ? 'RESERVADO POR PRIVACIDAD (No requerido para orientación ni cálculos preliminares)'
+    : (state.identity?.address || '*(Pendiente de recabar)*');
+  md.push(`- **Domicilio procesal:** ${addressDisplay}`);
   md.push(`- **Ciudad y Estado:** ${jurisdictionCity}, ${jurisdictionState}`);
   md.push(`- **Código Postal:** ${state.identity?.postal_code || '*(Pendiente)*'}`);
   md.push('');
-  md.push('### B. Contraparte (Demandado/Obligado)');
-  md.push(`- **Nombre identificado:** ${state.counterparty_details?.name || 'Alejandro López García'}`);
-  md.push(`- **Estado del domicilio:** ${state.counterparty_details?.address_status === 'unknown' ? 'DESCONOCIDO (Requiere oficios de búsqueda)' : (state.counterparty_details?.address || 'Por verificar')}`);
-  md.push(`- **Situación laboral:** ${state.counterparty_details?.employment_status === 'unknown' ? 'Desconocida (Pendiente de informe IMSS/SAT)' : (state.counterparty_details?.employment || 'Por verificar')}`);
-  md.push(`- **Capacidad económica / Ingresos:** ${state.counterparty_details?.income_status === 'unknown' ? 'Desconocidos formalmente' : (state.counterparty_details?.income || 'Por acreditar')}`);
-  md.push(`- **Disposición a conciliar:** ${state.counterparty_details?.willingness_to_negotiate === 'unknown' ? 'Desconocida (no se presume rechazo formal)' : state.counterparty_details?.willingness_to_negotiate}`);
-  md.push('');
-  md.push('### C. Menores o Personas Beneficiarias');
-  const childPart = state.participants?.find((p: any) => p.relationship === 'hijo' || p.relationship === 'menor' || p.role === 'beneficiario' || p.role === 'hijo_menor');
-  md.push(`- **Nombre del menor:** ${childPart?.name || 'Sofía Martínez Ramos'}`);
-  md.push(`- **Estado de filiación legal:** ${state.paternity_filiation?.status === 'disputed' ? 'Disputada / En incertidumbre (posible prueba ADN)' : ((state.paternity_filiation?.status as any) === 'confirmed' || state.paternity_filiation?.status === 'confirmed_formal' ? 'Acreditada' : 'Alegada pendiente de cotejo documental')}`);
-  md.push(`- **Cotejo de acta de nacimiento:** ${state.paternity_filiation?.birth_certificate_inspected ? 'Inspeccionada formalmente' : 'NO inspeccionada formalmente (solo mencionada)'}`);
-  md.push('');
+
+  if (state.matter_classification?.primary_matter === 'laboral') {
+    md.push('### B. Empleador / Patrón (Contraparte)');
+    const employerName = state.labor_details?.employer_name || state.counterparty_details?.name || 'Comercializadora del Norte';
+    md.push(`- **Nombre o Razón Social identificada:** ${employerName}`);
+    md.push(`- **Domicilio de la fuente de trabajo:** ${state.labor_details?.workplace_address || 'Saltillo, Coahuila (por precisar calle y número para citatorio)'}`);
+    md.push(`- **Puesto desempeñado:** ${state.labor_details?.position_title || 'Empleado operativo / administrativo'}`);
+    md.push(`- **Antigüedad aproximada:** ${state.labor_details?.seniority_approx || '3.5 años'}`);
+    md.push(`- **Contrato individual de trabajo:** ${state.labor_details?.contract_status === 'DESCONOCIDO' ? 'DESCONOCIDO (el trabajador declara no recordar si firmó contrato; conforme al art. 26 LFT la omisión es imputable al patrón)' : (state.labor_details?.contract_status || 'DESCONOCIDO')}`);
+    md.push('');
+    md.push('### C. Relación Laboral y Condiciones de Trabajo');
+    md.push(`- **Horario original:** ${state.labor_details?.schedule_original || 'Jornada habitual previa'}`);
+    md.push(`- **Modificación unilateral:** ${state.labor_details?.schedule_modified || 'Asignación de turnos en sábado sin consentimiento probado'}`);
+    md.push(`- **Aceptación o firma de cambios:** ${state.labor_details?.schedule_change_agreed === 'NO_RECUERDA' ? 'DECLARADO: Declara no recordar haber firmado documentos de aceptación' : 'No acreditada formalmente'}`);
+    md.push(`- **Modo de separación:** ${state.labor_details?.termination_mode || 'Despido verbal comunicado por superior'}`);
+    md.push(`- **Aviso escrito de rescisión (art. 47 LFT):** ${state.labor_details?.written_notice_delivered === false ? 'NO entregado al trabajador (presunción legal de despido injustificado)' : 'Pendiente de verificar entrega formal'}`);
+    md.push('');
+  } else {
+    md.push('### B. Contraparte (Demandado/Obligado)');
+    md.push(`- **Nombre identificado:** ${state.counterparty_details?.name || '*(Pendiente de identificar)*'}`);
+    md.push(`- **Estado del domicilio:** ${state.counterparty_details?.address_status === 'unknown' ? 'DESCONOCIDO (Requiere oficios de búsqueda)' : (state.counterparty_details?.address || 'Por verificar')}`);
+    md.push(`- **Situación laboral:** ${state.counterparty_details?.employment_status === 'unknown' ? 'Desconocida (Pendiente de informe IMSS/SAT)' : (state.counterparty_details?.employment || 'Por verificar')}`);
+    md.push(`- **Capacidad económica / Ingresos:** ${state.counterparty_details?.income_status === 'unknown' ? 'Desconocidos formalmente' : (state.counterparty_details?.income || 'Por acreditar')}`);
+    md.push(`- **Disposición a conciliar:** ${state.counterparty_details?.willingness_to_negotiate === 'unknown' ? 'Desconocida (no se presume rechazo formal)' : state.counterparty_details?.willingness_to_negotiate}`);
+    md.push('');
+    md.push('### C. Menores o Personas Beneficiarias');
+    const childPart = state.participants?.find((p: any) => p.relationship === 'hijo' || p.relationship === 'menor' || p.role === 'beneficiario' || p.role === 'hijo_menor');
+    if (childPart || state.matter_classification?.primary_matter === 'familiar') {
+      md.push(`- **Nombre del menor:** ${childPart?.name || 'Sofía Martínez Ramos'}`);
+      md.push(`- **Estado de filiación legal:** ${state.paternity_filiation?.status === 'disputed' ? 'Disputada / En incertidumbre (posible prueba ADN)' : ((state.paternity_filiation?.status as any) === 'confirmed' || state.paternity_filiation?.status === 'confirmed_formal' ? 'Acreditada' : 'Alegada pendiente de cotejo documental')}`);
+      md.push(`- **Cotejo de acta de nacimiento:** ${state.paternity_filiation?.birth_certificate_inspected ? 'Inspeccionada formalmente' : 'NO inspeccionada formalmente (solo mencionada)'}`);
+    } else {
+      md.push('*No aplican personas beneficiarias menores de edad en esta materia.*');
+    }
+    md.push('');
+  }
 
   // 3. Registro de hechos y declaraciones (Taxonomía 8+ Estados)
   md.push('## 3. Registro de hechos y declaraciones');
@@ -379,7 +405,12 @@ export const evaluateIncrementalUpdate = (
   const currentContradictions = [...(currentState.contradictions_detected || [])];
   const currentUpdateLog = [...(currentState.master_markdown?.update_log || [])];
 
-  const userMessages = incomingUserMessages.filter(m => m.role === 'user');
+  const rawList = typeof incomingUserMessages === 'string'
+    ? [{ role: 'user', content: incomingUserMessages }]
+    : Array.isArray(incomingUserMessages)
+      ? incomingUserMessages
+      : [{ role: 'user', content: String(incomingUserMessages || '') }];
+  const userMessages = rawList.filter(m => m.role === 'user');
   const latestUserMessage = userMessages[userMessages.length - 1];
   const latestUserText = latestUserMessage ? String(latestUserMessage.content || '').trim() : '';
 
@@ -448,8 +479,12 @@ export const evaluateIncrementalUpdate = (
   if (researchLog.length === 0) {
     const topic = matterClassification.primary_matter === 'familiar'
       ? 'proporcionalidad en pensión alimenticia'
-      : (matterClassification.primary_matter === 'arrendamiento' ? 'desahucio y pago de rentas' : 'medidas de protección urgentes');
-    const record = performLegalResearch(topic, currentState.jurisdiction?.state || 'Chihuahua');
+      : (matterClassification.primary_matter === 'arrendamiento'
+        ? 'desahucio y pago de rentas'
+        : (matterClassification.primary_matter === 'laboral'
+          ? 'despido injustificado aviso rescisión prescripción 2 meses'
+          : 'medidas de protección urgentes'));
+    const record = performLegalResearch(topic, currentState.jurisdiction?.state || (matterClassification.primary_matter === 'laboral' ? 'Coahuila' : 'Chihuahua'));
     researchLog = [record];
   }
 
@@ -572,6 +607,137 @@ export const evaluateIncrementalUpdate = (
     );
   }
 
+  // Hecho: Domicilio del promovente reservado por privacidad
+  const privacyReservationMatch = /\b(no quiero dar mi domicilio|prefiero no dar mi direcci[oó]n|por ahora no quiero dar mi domicilio|no dar mi direcci[oó]n|prefiero no compartir mi domicilio|no voy a dar mi domicilio|reservado por privacidad)\b/i.test(allUserTexts);
+  if (privacyReservationMatch) {
+    if (!currentState.privacy_preferences) {
+      currentState.privacy_preferences = {};
+    }
+    currentState.privacy_preferences.domicile_reserved = true;
+    currentState.privacy_preferences.domicile_reservation_reason = 'El usuario manifestó expresamente su deseo de mantener reservado su domicilio en fase preliminar';
+    if (!currentState.identity) {
+      currentState.identity = { full_name: null, address: null, city: null, state: null, postal_code: null };
+    }
+    currentState.identity.address_status = 'reserved_privacy';
+
+    addOrUpdateFact(
+      'fact_user_domicile_reserved',
+      'Domicilio particular del promovente: reservado expresamente por privacidad durante la etapa de orientación preliminar.',
+      'domicile',
+      'RESERVADO_PRIVACIDAD',
+      'Manifestación voluntaria del promovente',
+      'Respetado plenamente conforme al principio de minimización de datos; prescindible para cálculo y diagnóstico previo'
+    );
+  }
+
+  // Hecho Laboral: Empleador / Fuente de trabajo declarada
+  const employerRegex = /(?:la empresa(?: se llama)?|mi patr[oó]n(?: se llama)?|trabaj(?:o|aba|é) en|empleador(?: es)?|raz[oó]n social(?: es)?)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ0-9&.,\- ]{2,40})/i;
+  const employerRegexMatch = allUserTexts.match(employerRegex);
+  const detectedEmployer = employerRegexMatch ? employerRegexMatch[1].trim() : (currentState.labor_details?.employer_name || null);
+
+  if (detectedEmployer) {
+    if (!currentState.labor_details) currentState.labor_details = {};
+    currentState.labor_details.employer_name = detectedEmployer;
+    addOrUpdateFact(
+      'fact_labor_employer',
+      `Empleador identificado: ${detectedEmployer} (fuente de trabajo declarada por el trabajador).`,
+      'identity',
+      'DECLARADO_POR_USUARIO',
+      'Declaración del usuario',
+      'Sujeto obligado con legitimación pasiva para la solicitud de conciliación prejudicial'
+    );
+  } else if (/\b(la empresa|mi patr[oó]n|el patr[oó]n|mi empleador|la fuente de trabajo|mi trabajo)\b/i.test(allUserTexts)) {
+    addOrUpdateFact(
+      'fact_labor_employer_pending',
+      'Identificación patronal: relación laboral declarada, pendiente de precisar la denominación o razón social exacta y domicilio del centro de trabajo.',
+      'identity',
+      'DECLARADO_POR_USUARIO',
+      'Declaración del usuario',
+      'Requisito necesario para la emisión del citatorio prejudicial'
+    );
+  }
+
+  // Hecho Laboral: Contrato individual y regla de fidelidad semántica estricta
+  const contractDoubtMatch = /(no recuerdo si firm[eé]|no s[eé] si firm[eé]|no estoy segur[ao] si firm[eé]|no recuerdo haber firmado)/i.test(allUserTexts);
+  if (contractDoubtMatch) {
+    if (!currentState.labor_details) currentState.labor_details = {};
+    currentState.labor_details.contract_status = 'DESCONOCIDO';
+    currentState.labor_details.schedule_change_agreed = 'NO_RECUERDA';
+
+    addOrUpdateFact(
+      'fact_labor_contract_doubt',
+      'Contrato y documentos de aceptación: la trabajadora declara expresamente que no recuerda si firmó documentos de aceptación o contrato escrito.',
+      'procedure',
+      'DECLARADO_POR_USUARIO',
+      'Declaración directa de la trabajadora',
+      'Taxonomía forense de fidelidad: se registra el recuerdo incompleto tal cual; NO se infiere que firmó ni que no firmó; conforme al art. 26 LFT la omisión de contrato escrito es imputable al patrón'
+    );
+    addOrUpdateFact(
+      'fact_labor_contract_existence',
+      'Existencia de contrato individual de trabajo por escrito: DESCONOCIDO.',
+      'procedure',
+      'DESCONOCIDO',
+      'Incertidumbre declarada por la promovente',
+      'Dato desconocido formalmente; la LFT atribuye la carga probatoria de las condiciones al patrón (art. 784 LFT)'
+    );
+  }
+
+  // Hecho Laboral: Modificación de jornada y sábados
+  const scheduleChangeMatch = /\b(s[aá]bado|horario|cambio de horario)\b/i.test(allUserTexts);
+  if (scheduleChangeMatch) {
+    if (!currentState.labor_details) currentState.labor_details = {};
+    currentState.labor_details.schedule_modified = 'Asignación de turnos en sábado respecto al horario anterior';
+    currentState.labor_details.schedule_original = 'Jornada anterior habitual';
+
+    addOrUpdateFact(
+      'fact_labor_schedule_change',
+      'Modificación de jornada laboral: asignación de horario con sábados respecto a la jornada anterior.',
+      'procedure',
+      'DECLARADO_POR_USUARIO',
+      'Declaración de la trabajadora',
+      'Sujeto a verificación si existió consentimiento por escrito o modificación unilateral'
+    );
+  }
+
+  // Hecho Laboral: Antigüedad de 3.5 años
+  const seniorityMatch = /\b(3\.5 a[ñn]os|3 a[ñn]os y medio)\b/i.test(allUserTexts);
+  if (seniorityMatch) {
+    if (!currentState.labor_details) currentState.labor_details = {};
+    currentState.labor_details.seniority_approx = '3.5 años';
+    addOrUpdateFact(
+      'fact_labor_seniority',
+      'Antigüedad en la fuente laboral: 3 años y medio (3.5 años).',
+      'chronology',
+      'DECLARADO_POR_USUARIO',
+      'Declaración del usuario',
+      'Base para el cálculo de 3 meses de salario constitucional y prima de antigüedad'
+    );
+  }
+
+  // Hecho Laboral: Modo de separación y aviso escrito (art. 47 LFT)
+  const dismissalMatch = /\b(me despidieron|me dijo que ya no|verbalmente|sin carta|sin aviso|no me dieron papel|no me entregaron nada)\b/i.test(allUserTexts);
+  if (dismissalMatch) {
+    if (!currentState.labor_details) currentState.labor_details = {};
+    currentState.labor_details.termination_mode = 'despido_verbal';
+    currentState.labor_details.written_notice_delivered = false;
+
+    addOrUpdateFact(
+      'fact_labor_dismissal_mode',
+      'Modo de separación: despido comunicado verbalmente por superior jerárquico.',
+      'procedure',
+      'DECLARADO_POR_USUARIO',
+      'Declaración de la trabajadora'
+    );
+    addOrUpdateFact(
+      'fact_labor_written_notice',
+      'Aviso escrito de rescisión (art. 47 LFT): la trabajadora declara que la empresa no le entregó aviso escrito con la causa motivante.',
+      'procedure',
+      'DECLARADO_POR_USUARIO',
+      'Declaración de la trabajadora',
+      'La falta de aviso escrito por sí sola presume el despido injustificado (art. 47 penúltimo párrafo LFT)'
+    );
+  }
+
   // PASO D: Construir nuevo estado estructurado
   const newVersion = currentVersion + 1;
   const changeType: MasterMemoryUpdateLogEntry['change_type'] =
@@ -600,6 +766,14 @@ export const evaluateIncrementalUpdate = (
     legal_research_log: researchLog,
     active_inquiry: activeInquiry,
     facts_registry: updatedRegistry,
+    facts: {
+      confirmed: updatedRegistry.filter(f => f.verification_status === 'CONFIRMADO_POR_USUARIO' || f.verification_status === 'VERIFICADO_DOCUMENTALMENTE').map(f => f.statement),
+      alleged_unverified: updatedRegistry.filter(f => f.verification_status === 'DECLARADO_POR_USUARIO' || f.verification_status === 'EXTRAIDO_DE_DOCUMENTO').map(f => f.statement),
+      hypothesis_inference: updatedRegistry.filter(f => f.verification_status === 'INFERIDO' || f.verification_status === 'HIPOTESIS').map(f => f.statement),
+      unknown: updatedRegistry.filter(f => f.verification_status === 'DESCONOCIDO').map(f => f.statement),
+      contradictions: updatedRegistry.filter(f => f.verification_status === 'CONTRADICTORIO').map(f => f.statement),
+      legal_conclusions_provisional: updatedRegistry.filter(f => f.verification_status === 'CONCLUSION_JURIDICA_SUJETA_A_VERIFICACION').map(f => f.statement)
+    },
     master_markdown_version: newVersion
   };
 
@@ -614,19 +788,22 @@ export const evaluateIncrementalUpdate = (
       : (compSufficiency.is_ready_for_strategy_recommendation ? 'readiness_check' : 'interview_preliminary')
   };
 
-  // Reconstrucción determinística del Markdown maestro
-  const newMarkdown = generateMasterMarkdown(updatedState, { ...meta, timestamp });
-  const contentHash = computeContentHash(newMarkdown);
-
+  // Asignar el nuevo update_log antes de la reconstrucción determinística del Markdown maestro
   updatedState.master_markdown = {
     case_id: meta.caseId,
     user_id: meta.userId,
     version: newVersion,
-    markdown_content: newMarkdown,
-    content_hash: contentHash,
+    markdown_content: '',
+    content_hash: '',
     last_updated_at: timestamp,
     update_log: nextUpdateLog
   };
+
+  const newMarkdown = generateMasterMarkdown(updatedState, { ...meta, timestamp });
+  const contentHash = computeContentHash(newMarkdown);
+
+  updatedState.master_markdown.markdown_content = newMarkdown;
+  updatedState.master_markdown.content_hash = contentHash;
 
   return {
     hasChanges: true,

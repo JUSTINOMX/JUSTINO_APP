@@ -50,7 +50,8 @@ export const evaluateComprehensiveSufficiency = (
                        r.status === 'VERIFICADO_CON_FUENTE_EXTERNA' || 
                        r.status === 'DECLARADO_POR_USUARIO' ||
                        r.status === 'NO_APLICA_JUSTIFICADO' ||
-                       r.status === 'RESUELTO_CON_LIMITACIONES';
+                       r.status === 'RESUELTO_CON_LIMITACIONES' ||
+                       r.status === 'RESERVADO_POR_PRIVACIDAD';
 
     if (r.importance === 'CRITICA') {
       totalImportantCount += 2;
@@ -82,25 +83,36 @@ export const evaluateComprehensiveSufficiency = (
   // Seleccionar vía preferente
   const recommendedPathway = pathways.find(p => p.status === 'preferente') || pathways[0];
 
+  const primaryMatter = state.matter_classification?.primary_matter || 'familiar';
+  const defaultGrounds = primaryMatter === 'laboral'
+    ? ['Ley Federal del Trabajo (Arts. 47, 48, 518, 684-A y conexos)']
+    : (primaryMatter === 'arrendamiento'
+      ? ['Código Civil para el Estado de Coahuila / Local', 'Código de Procedimientos Civiles']
+      : ['Código Civil aplicable', 'Código Nacional de Procedimientos Civiles y Familiares']);
+
+  const defaultPetitions = primaryMatter === 'laboral'
+    ? ['Audiencia de Conciliación Prejudicial obligatoria', 'Convenio formal o expedición de Constancia de No Conciliación']
+    : ['Fijación de medidas de protección o pensión provisional', 'Emplazamiento a juicio'];
+
   // Matriz de documento candidato
   let candidateDocMatrix: DocumentCandidateMatrix | undefined;
   if (recommendedPathway) {
     candidateDocMatrix = {
-      doc_type: recommendedPathway.type === 'judicial' ? 'Demanda Inicial Formal' : 'Solicitud / Requerimiento Extrajudicial',
+      doc_type: recommendedPathway.type === 'judicial' ? 'Demanda Inicial Formal' : (primaryMatter === 'laboral' ? 'Solicitud de Conciliación Prejudicial' : 'Solicitud / Requerimiento Extrajudicial'),
       objective: recommendedPathway.description,
       recipient_authority: recommendedPathway.competent_authority,
       standing_and_capacity: state.identity.full_name ? `Promovente: ${state.identity.full_name}` : 'Pendiente de acreditación',
       essential_facts_required: state.facts?.confirmed || [],
       identities_relationships_to_prove: (state.participants || []).map(p => `${p.name} (${p.role})`),
       dates_and_amounts: (state.dates || []).map(d => `${d.label || 'Fecha'}: ${d.value || d.date}`),
-      legal_grounds: ['Código Civil aplicable', 'Código Nacional de Procedimientos Civiles y Familiares'],
-      petitions: ['Fijación de medidas de protección o pensión provisional', 'Emplazamiento a juicio'],
+      legal_grounds: defaultGrounds,
+      petitions: defaultPetitions,
       available_evidence: (state.evidence || []).filter(e => e.status === 'VERIFICADO_DOCUMENTALMENTE' || e.status === 'inspected').map(e => e.name || e.title || 'Documento'),
       required_annexes: recommendedPathway.required_documents,
-      formal_requirements: ['Firma autógrafa', 'Copias de traslado para emplazamiento'],
+      formal_requirements: ['Firma autógrafa', 'Identificación oficial en original y copia'],
       missing_data: [...missingCritical, ...missingSecondary],
       risks_if_incomplete: [
-        'Desechamiento inicial o prevención judicial por obscuridad de demanda',
+        primaryMatter === 'laboral' ? 'Prescripción del término de 2 meses si no se radica a tiempo' : 'Desechamiento inicial o prevención judicial por obscuridad de demanda',
         'Imposibilidad de notificar válidamente a la contraparte'
       ],
       is_ready_for_drafting: isReadyForDraft
