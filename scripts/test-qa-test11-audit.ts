@@ -7,13 +7,8 @@ import { validateDocumentContent, validateDocumentSufficiency } from '../service
 dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  console.error("Missing Supabase credentials in environment");
-  process.exit(1);
-}
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://mock-supabase-local.internal';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mock-service-role-key-for-local-testing';
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
@@ -247,7 +242,7 @@ async function runTest11Audit() {
   // ============================================================================
   try {
     const testUserAId = "053921a3-dfb9-45e1-9d09-e190878c001d";
-    
+
     // Crear o recuperar un caso de prueba
     const { data: testCase, error: caseErr } = await supabaseAdmin.from('legal_cases').insert([{
       user_id: testUserAId,

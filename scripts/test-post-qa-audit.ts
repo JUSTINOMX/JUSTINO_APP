@@ -7,13 +7,8 @@ import { validateDocumentContent } from '../services/justino-service';
 dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  console.error("Missing Supabase credentials");
-  process.exit(1);
-}
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://mock-supabase-local.internal';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mock-service-role-key-for-local-testing';
 
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
